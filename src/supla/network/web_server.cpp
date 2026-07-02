@@ -237,6 +237,12 @@ void Supla::WebServer::addSecurityLog(uint32_t source, const char *log) const {
   }
 }
 
+void Supla::WebServer::addLastStateLog(const char *log) const {
+  if (sdc) {
+    sdc->addLastStateLog(log);
+  }
+}
+
 void Supla::WebServer::parsePost(const char *postContent,
                                  int size,
                                  bool lastChunk) {

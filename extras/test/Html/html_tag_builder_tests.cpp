@@ -17,14 +17,18 @@
  */
 
 #include <config_mock.h>
+#include <SuplaDevice.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <network_mock.h>
+#include <simple_time.h>
+#include <supla/device/last_state_logger.h>
 #include <supla/network/html/custom_text_parameter.h>
 #include <supla/network/html/select_input_parameter.h>
 #include <supla/network/html/wifi_parameters.h>
 #include <supla/network/web_sender.h>
 #include <supla/network/web_server.h>
+#include <supla/network/wifi_scan_result.h>
 #include <supla/storage/config_tags.h>
 
 #include <cstdio>
@@ -82,6 +86,7 @@ class CountingHtmlElement : public Supla::HtmlElement {
 class HtmlTagBuilderTests : public ::testing::Test {
  protected:
   void TearDown() override {
+    Supla::WifiScanResultCache::Instance()->clear();
     EXPECT_EQ(Supla::HtmlElement::begin(), nullptr);
     EXPECT_EQ(Supla::Network::FirstInstance(), nullptr);
   }
@@ -95,6 +100,7 @@ class HtmlTagBuilderTests : public ::testing::Test {
   }
 
   std::string sendHtml;
+  SimpleTime time;
 };
 
 TEST_F(HtmlTagBuilderTests, BuildsNestedHtmlAndEscapes) {
@@ -303,6 +309,9 @@ TEST_F(HtmlTagBuilderTests, WifiParametersRegressionBeforeRefactor) {
   EXPECT_THAT(sendHtml, HasSubstr("for=\"wifi_en\">Enable Wi-Fi"));
   EXPECT_THAT(sendHtml,
               HasSubstr("name=\"sid\" id=\"sid\" value=\"ssid_test\""));
+  EXPECT_THAT(sendHtml,
+              HasSubstr("<div><input type=\"text\" name=\"sid\" id=\"sid\""));
+  EXPECT_THAT(sendHtml, HasSubstr("Wi-Fi scan result is not available yet"));
   EXPECT_THAT(sendHtml, HasSubstr("name=\"wpw\" id=\"wpw\""));
   EXPECT_THAT(sendHtml, HasSubstr("id=\"wifi_mode\""));
   EXPECT_THAT(sendHtml, HasSubstr("id=\"wifi_static_box\""));
@@ -318,4 +327,198 @@ TEST_F(HtmlTagBuilderTests, WifiParametersRegressionBeforeRefactor) {
   EXPECT_THAT(sendHtml, HasSubstr("placeholder=\"255.255.255.0 or /24\""));
   EXPECT_THAT(sendHtml, HasSubstr("id=\"wifi_dns2\" maxlength=\"15\""));
   EXPECT_THAT(sendHtml, HasSubstr("placeholder=\"8.8.4.4\""));
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersShowsScanQualityForSavedSsid) {
+  ConfigMock cfg;
+  SenderMock sender;
+  sendHtml.clear();
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+  cache->addOrUpdate("ssid_test", -74, 6);
+  cache->finishUpdate(millis());
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, getUInt8(StrEq(Supla::WifiDisableTag), _))
+      .WillOnce([](const char*, uint8_t* value) {
+        *value = 0;
+        return true;
+      });
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillOnce([](char* ssid) {
+    std::memcpy(ssid, "ssid_test", sizeof("ssid_test"));
+    return true;
+  });
+  EXPECT_CALL(cfg, loadNetifConfig(StrEq(Supla::ConfigTag::WifiNetifCfgTag), _))
+      .WillOnce(Return(false));
+  EXPECT_CALL(sender, send(_, _))
+      .WillRepeatedly(
+          [this](const char* data, int size) { appendSentHtml(data, size); });
+
+  {
+    NetworkMock net1;
+    NetworkMock net2;
+    (void)net1;
+    (void)net2;
+
+    Supla::Html::WifiParameters params;
+    params.send(&sender);
+  }
+
+  EXPECT_THAT(sendHtml, HasSubstr("Found in Wi-Fi scan"));
+  EXPECT_THAT(sendHtml, HasSubstr("RSSI -74 dBm"));
+  EXPECT_THAT(sendHtml, HasSubstr("quality 52%"));
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersKeepsSsidInputAndAddsDatalist) {
+  ConfigMock cfg;
+  SenderMock sender;
+  sendHtml.clear();
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+  cache->addOrUpdate("ssid_test", -74, 6);
+  cache->addOrUpdate("ssid_other", -45, 11);
+  cache->finishUpdate(millis());
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, getUInt8(StrEq(Supla::WifiDisableTag), _))
+      .WillOnce([](const char*, uint8_t* value) {
+        *value = 0;
+        return true;
+      });
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillOnce([](char* ssid) {
+    std::memcpy(ssid, "ssid_test", sizeof("ssid_test"));
+    return true;
+  });
+  EXPECT_CALL(cfg, loadNetifConfig(StrEq(Supla::ConfigTag::WifiNetifCfgTag), _))
+      .WillOnce(Return(false));
+  EXPECT_CALL(sender, send(_, _))
+      .WillRepeatedly(
+          [this](const char* data, int size) { appendSentHtml(data, size); });
+
+  {
+    NetworkMock net1;
+    NetworkMock net2;
+    (void)net1;
+    (void)net2;
+
+    Supla::Html::WifiParameters params;
+    params.send(&sender);
+  }
+
+  EXPECT_THAT(sendHtml, HasSubstr("type=\"text\""));
+  EXPECT_THAT(sendHtml, HasSubstr("name=\"sid\""));
+  EXPECT_THAT(sendHtml, HasSubstr("id=\"sid\""));
+  EXPECT_THAT(sendHtml, HasSubstr("list=\"wifi_ssid_list\""));
+  EXPECT_THAT(sendHtml, HasSubstr("oninput=\"wifiSsidChanged()\""));
+  EXPECT_THAT(sendHtml, HasSubstr("onchange=\"wifiSsidChanged()\""));
+  EXPECT_THAT(sendHtml,
+              HasSubstr("<div class=\"hint\" id=\"wifi_scan_hint\">"));
+  EXPECT_THAT(sendHtml, HasSubstr("<datalist id=\"wifi_ssid_list\">"));
+  EXPECT_THAT(sendHtml, HasSubstr("<option value=\"ssid_test\">"));
+  EXPECT_THAT(sendHtml, HasSubstr("<option value=\"ssid_other\">"));
+  EXPECT_THAT(sendHtml, HasSubstr("RSSI -74 dBm, quality 52%, ch 6"));
+  EXPECT_THAT(sendHtml, HasSubstr("var wifiScanHints=Object.create(null);"));
+  EXPECT_THAT(sendHtml, HasSubstr("function wifiSsidChanged()"));
+  EXPECT_THAT(sendHtml,
+              HasSubstr("h.textContent=wifiScanHints[e.value]||"));
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersEscapesSsidForDatalistScript) {
+  ConfigMock cfg;
+  SenderMock sender;
+  sendHtml.clear();
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+  cache->addOrUpdate("ssid_'\\</script>&", -60, 1);
+  cache->finishUpdate(millis());
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, getUInt8(StrEq(Supla::WifiDisableTag), _))
+      .WillOnce([](const char*, uint8_t* value) {
+        *value = 0;
+        return true;
+      });
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillOnce([](char* ssid) {
+    std::memcpy(ssid, "ssid_'\\</script>&", sizeof("ssid_'\\</script>&"));
+    return true;
+  });
+  EXPECT_CALL(cfg, loadNetifConfig(StrEq(Supla::ConfigTag::WifiNetifCfgTag), _))
+      .WillOnce(Return(false));
+  EXPECT_CALL(sender, send(_, _))
+      .WillRepeatedly(
+          [this](const char* data, int size) { appendSentHtml(data, size); });
+
+  {
+    NetworkMock net1;
+    NetworkMock net2;
+    (void)net1;
+    (void)net2;
+
+    Supla::Html::WifiParameters params;
+    params.send(&sender);
+  }
+
+  EXPECT_THAT(
+      sendHtml,
+      HasSubstr("<option value=\"ssid_&apos;\\&lt;/script&gt;&amp;\">"));
+  EXPECT_THAT(sendHtml, HasSubstr("wifiScanHints['ssid_\\'\\\\"));
+  EXPECT_THAT(sendHtml, HasSubstr("\\x3C/script\\x3E\\x26']"));
+}
+
+TEST_F(HtmlTagBuilderTests,
+       WifiParametersLogsScanResultToLastStateOnSaveAndRestart) {
+  ConfigMock cfg;
+  DummyWebServer server;
+  SuplaDeviceClass sdc;
+  auto logger = new Supla::Device::LastStateLogger;
+  sdc.setLastStateLogger(logger);
+  server.setSuplaDeviceClass(&sdc);
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+  cache->addOrUpdate("ssid_test", -74, 6);
+  cache->finishUpdate(millis());
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillOnce([](char* ssid) {
+    std::memcpy(ssid, "ssid_test", sizeof("ssid_test"));
+    return true;
+  });
+
+  {
+    Supla::Html::WifiParameters params;
+    EXPECT_FALSE(params.handleResponse("rbt", "2"));
+    params.onProcessingEnd();
+  }
+
+  ASSERT_TRUE(logger->prepareLastStateLog());
+  char *log = logger->getLog();
+  ASSERT_NE(nullptr, log);
+  EXPECT_THAT(log, HasSubstr("Wi-Fi: \"ssid_test\" found"));
+  EXPECT_THAT(log, HasSubstr("RSSI -74 dBm"));
+  EXPECT_THAT(log, HasSubstr("quality 52%"));
+  EXPECT_EQ(nullptr, logger->getLog());
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersDoesNotLogScanResultOnPlainSave) {
+  ConfigMock cfg;
+  DummyWebServer server;
+  SuplaDeviceClass sdc;
+  auto logger = new Supla::Device::LastStateLogger;
+  sdc.setLastStateLogger(logger);
+  server.setSuplaDeviceClass(&sdc);
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, getWiFiSSID(_)).Times(0);
+
+  {
+    Supla::Html::WifiParameters params;
+    params.onProcessingEnd();
+  }
+
+  ASSERT_TRUE(logger->prepareLastStateLog());
+  EXPECT_EQ(nullptr, logger->getLog());
 }

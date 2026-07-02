@@ -159,7 +159,10 @@ void WebSender::labelFor(const char* id, const char* text) {
 void WebSender::textInput(const char* name,
                           const char* id,
                           const char* value,
-                          int maxLength) {
+                          int maxLength,
+                          const char* listId,
+                          const char* onInput,
+                          const char* onChange) {
   auto input = voidTag("input");
   input.attr("type", "text");
   if (maxLength >= 0) {
@@ -173,6 +176,15 @@ void WebSender::textInput(const char* name,
   }
   if (value) {
     input.attr("value", value);
+  }
+  if (listId) {
+    input.attr("list", listId);
+  }
+  if (onInput) {
+    input.attr("oninput", onInput);
+  }
+  if (onChange) {
+    input.attr("onchange", onChange);
   }
   input.finish();
 }

@@ -67,6 +67,7 @@ class WebServer {
   bool isCsrfTokenValid(const char *token);
   void setBetaProcessing();
   void setCsrfFirstFieldRequired(bool required);
+  void addLastStateLog(const char *log) const;
 
   virtual bool verifyEmbeddedHttpsCertificates();
 

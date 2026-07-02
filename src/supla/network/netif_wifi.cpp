@@ -48,6 +48,8 @@ bool Wifi::isWifiConfigRequired() {
   return true;
 }
 
+void Wifi::startConfigModeScan() {
+}
 
 void Wifi::onLoadConfig() {
   Network::onLoadConfig();

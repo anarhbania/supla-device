@@ -34,6 +34,7 @@
 #include <SuplaDevice.h>
 #include <fcntl.h>
 #include <supla/input_noise_guard.h>
+#include <supla/network/wifi_scan_result.h>
 #include <supla/storage/config.h>
 #include <supla/storage/storage.h>
 #include <supla/supla_lib_config.h>
@@ -112,11 +113,13 @@ static void eventHandler(void *arg,
         break;
       }
       case WIFI_EVENT_STA_START: {
-        SUPLA_LOG_DEBUG("[%s] Starting connection to AP",
-                        thisNetIntfPtr->getIntfName());
         firstWiFiScanDone = false;
-        Supla::InputNoiseGuard::NotifyWifiTransition();
-        esp_wifi_connect();
+        if (!thisNetIntfPtr->isInConfigMode()) {
+          SUPLA_LOG_DEBUG("[%s] Starting connection to AP",
+                          thisNetIntfPtr->getIntfName());
+          Supla::InputNoiseGuard::NotifyWifiTransition();
+          esp_wifi_connect();
+        }
         break;
       }
       case WIFI_EVENT_STA_CONNECTED: {
@@ -159,6 +162,12 @@ static void eventHandler(void *arg,
                     data->reason);
         }
         firstWiFiScanDone = true;
+        break;
+      }
+      case WIFI_EVENT_SCAN_DONE: {
+        if (thisNetIntfPtr) {
+          thisNetIntfPtr->finishConfigModeScan();
+        }
         break;
       }
     }
@@ -276,7 +285,7 @@ void Supla::EspIdfWifi::setup() {
     wifi_config.ap.beacon_interval = 200;
 
     Supla::InputNoiseGuard::NotifyWifiTransition();
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     uint8_t proto = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G;
     esp_wifi_set_protocol(WIFI_IF_AP, proto);
@@ -349,6 +358,9 @@ void Supla::EspIdfWifi::setup() {
     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(txPower));
   }
 
+  if (mode == Supla::DEVICE_MODE_CONFIG) {
+    startConfigModeScan();
+  }
 
   allowDisable = true;
   initDone = true;
@@ -365,6 +377,7 @@ void Supla::EspIdfWifi::disable() {
   }
 
   allowDisable = false;
+  configModeScanInProgress = false;
   staticIpConfigured = false;
   SUPLA_LOG_DEBUG("[%s] disabling WiFi connection", getIntfName());
   DisconnectProtocols();
@@ -449,6 +462,63 @@ void Supla::EspIdfWifi::setIpv4Addr(uint32_t ip) {
 
 bool Supla::EspIdfWifi::isInConfigMode() {
   return mode == Supla::DEVICE_MODE_CONFIG;
+}
+
+void Supla::EspIdfWifi::startConfigModeScan() {
+  if (mode != Supla::DEVICE_MODE_CONFIG) {
+    return;
+  }
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->clear();
+
+  wifi_scan_config_t scanConfig = {};
+  scanConfig.show_hidden = true;
+
+  esp_err_t result = esp_wifi_scan_start(&scanConfig, false);
+  if (result == ESP_OK) {
+    configModeScanInProgress = true;
+    SUPLA_LOG_INFO("[%s] config mode scan started", getIntfName());
+  } else {
+    configModeScanInProgress = false;
+    SUPLA_LOG_WARNING("[%s] config mode scan start failed (%d)",
+                      getIntfName(),
+                      result);
+  }
+}
+
+void Supla::EspIdfWifi::finishConfigModeScan() {
+  if (!configModeScanInProgress) {
+    return;
+  }
+
+  configModeScanInProgress = false;
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+
+  uint16_t apCount = 0;
+  if (esp_wifi_scan_get_ap_num(&apCount) != ESP_OK) {
+    cache->clear();
+    SUPLA_LOG_WARNING("[%s] config mode scan failed", getIntfName());
+    esp_wifi_clear_ap_list();
+    return;
+  }
+
+  for (uint16_t i = 0; i < apCount; i++) {
+    wifi_ap_record_t ap = {};
+    if (esp_wifi_scan_get_ap_record(&ap) != ESP_OK) {
+      break;
+    }
+    cache->addOrUpdate(reinterpret_cast<const char *>(ap.ssid),
+                       ap.rssi,
+                       ap.primary);
+  }
+
+  esp_wifi_clear_ap_list();
+  cache->finishUpdate(millis());
+  SUPLA_LOG_INFO("[%s] config mode scan completed (%u networks)",
+                 getIntfName(),
+                 static_cast<unsigned int>(apCount));
 }
 
 bool Supla::EspIdfWifi::getMacAddr(uint8_t *out) {

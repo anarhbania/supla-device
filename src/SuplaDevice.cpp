@@ -962,7 +962,9 @@ bool SuplaDeviceClass::iterateNetworkSetup() {
   }
 
   if (deviceMode == Supla::DEVICE_MODE_CONFIG) {
-    // In config mode we ignore this method
+    // In config mode we don't require network readiness, but network
+    // interfaces may still have background work, like Wi-Fi scan results.
+    Supla::Network::Iterate();
     return true;
   }
 

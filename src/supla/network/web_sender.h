@@ -302,7 +302,10 @@ class WebSender {
   void textInput(const char* name,
                  const char* id,
                  const char* value = nullptr,
-                 int maxLength = -1);
+                 int maxLength = -1,
+                 const char* listId = nullptr,
+                 const char* onInput = nullptr,
+                 const char* onChange = nullptr);
 
   /**
    * @brief Emit a password input control.

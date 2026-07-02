@@ -37,7 +37,10 @@ class WifiParameters : public HtmlElement {
   void onProcessingEnd() override;
 
  protected:
+  void logWifiScanResult();
+
   bool checkboxFound = false;
+  bool restartRequested = false;
   NetworkAddressParameters netifParameters;
 };
 

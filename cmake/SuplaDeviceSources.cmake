@@ -98,6 +98,7 @@ set(SUPLA_DEVICE_SRCS
   ${SUPLA_DEVICE_SRC_DIR}/supla/network/web_sender.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/network/html_output_buffer.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/network/netif_wifi.cpp
+  ${SUPLA_DEVICE_SRC_DIR}/supla/network/wifi_scan_result.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/network/netif_lan.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/network/html/device_info.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/network/html/protocol_parameters.cpp

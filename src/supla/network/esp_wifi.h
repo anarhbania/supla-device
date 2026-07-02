@@ -24,6 +24,8 @@
 #include <supla/input_noise_guard.h>
 #include <supla/log_wrapper.h>
 #include <supla/network/arduino_netif_config.h>
+#include <supla/network/wifi_scan_result.h>
+#include <supla/time.h>
 #include <supla/tools.h>
 
 #ifdef ARDUINO_ARCH_ESP8266
@@ -120,9 +122,10 @@ class ESPWifi : public Supla::Wifi {
     if (mode == Supla::DEVICE_MODE_CONFIG) {
       SUPLA_LOG_INFO("WiFi: enter config mode with SSID: \"%s\"", hostname);
       Supla::InputNoiseGuard::NotifyWifiTransition();
-      WiFi.mode(WIFI_MODE_AP);
+      WiFi.mode(WIFI_AP_STA);
       Supla::InputNoiseGuard::NotifyWifiTransition();
       WiFi.softAP(hostname, nullptr, 6);
+      startConfigModeScan();
 
     } else {
       SUPLA_LOG_INFO("WiFi: establishing connection with SSID: \"%s\"", ssid);
@@ -146,6 +149,63 @@ class ESPWifi : public Supla::Wifi {
     }
 
     yield();
+  }
+
+  bool iterate() override {
+    if (!configModeScanInProgress) {
+      return false;
+    }
+
+    int scanResult = WiFi.scanComplete();
+    if (scanResult == WIFI_SCAN_RUNNING) {
+      return false;
+    }
+
+    configModeScanInProgress = false;
+    auto cache = Supla::WifiScanResultCache::Instance();
+    cache->beginUpdate();
+
+    if (scanResult >= 0) {
+      for (int i = 0; i < scanResult; i++) {
+        cache->addOrUpdate(WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i));
+      }
+      cache->finishUpdate(millis());
+      SUPLA_LOG_INFO("WiFi: config mode scan completed (%d networks)",
+                     scanResult);
+    } else {
+      cache->clear();
+      SUPLA_LOG_WARNING("WiFi: config mode scan failed (%d)", scanResult);
+    }
+
+    WiFi.scanDelete();
+    return false;
+  }
+
+  void startConfigModeScan() override {
+    if (mode != Supla::DEVICE_MODE_CONFIG) {
+      return;
+    }
+
+    auto cache = Supla::WifiScanResultCache::Instance();
+    cache->clear();
+    WiFi.scanDelete();
+    int scanResult = WiFi.scanNetworks(true, true);
+    configModeScanInProgress = (scanResult == WIFI_SCAN_RUNNING);
+    if (!configModeScanInProgress && scanResult >= 0) {
+      cache->beginUpdate();
+      for (int i = 0; i < scanResult; i++) {
+        cache->addOrUpdate(WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i));
+      }
+      cache->finishUpdate(millis());
+      WiFi.scanDelete();
+      SUPLA_LOG_INFO("WiFi: config mode scan completed (%d networks)",
+                     scanResult);
+    } else if (!configModeScanInProgress) {
+      SUPLA_LOG_WARNING("WiFi: config mode scan start failed (%d)",
+                        scanResult);
+    } else {
+      SUPLA_LOG_INFO("WiFi: config mode scan started");
+    }
   }
 
   void disable() override {
@@ -202,6 +262,7 @@ class ESPWifi : public Supla::Wifi {
 
  protected:
   bool wifiConfigured = false;
+  bool configModeScanInProgress = false;
 
 #ifdef ARDUINO_ARCH_ESP8266
   WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
