@@ -116,6 +116,22 @@ std::string expectedDiscoveryTopic(const char *type,
          std::to_string(subId) + "/config";
 }
 
+void expectEmptyDiscovery(MqttTestMock &mqtt, const char *type, int channel) {
+  EXPECT_CALL(mqtt,
+              publishTest(StrEq(expectedDiscoveryTopic(type, channel, 0)),
+                          StrEq(""),
+                          0,
+                          true));
+}
+
+void expectEmptyState(MqttTestMock &mqtt, int channel, const char *suffix) {
+  EXPECT_CALL(mqtt,
+              publishTest(StrEq(expectedChannelTopic(channel, suffix)),
+                          StrEq(""),
+                          0,
+                          true));
+}
+
 nlohmann::json baseDiscoveryPayload(int channel) {
   return nlohmann::json{
       {"avty_t", std::string(kExpectedPrefix) + "/state/connected"},
@@ -308,6 +324,7 @@ TEST_F(MqttChannelDispatchTests, publishChannelStateCoversBasicTypes) {
                           StrEq("33"),
                           0,
                           true));
+  expectEmptyState(mqtt, roller.getChannelNumber(), "state/on");
   mqtt.publishChannelState(roller.getChannelNumber());
 
   EXPECT_CALL(
@@ -500,6 +517,50 @@ TEST_F(MqttChannelDispatchTests, publishChannelStateActionTriggerIsNoop) {
   mqtt.publishChannelState(actionTrigger.getChannelNumber());
 }
 
+TEST_F(MqttChannelDispatchTests,
+       publishChannelStateCleansRelayRollerShutterPairPrimaryUnusedState) {
+  SuplaDeviceClass sd;
+  StrictMock<MqttTestMock> mqtt(&sd);
+  initMqtt(sd, mqtt);
+
+  Supla::Control::RelayRollerShutterPair pair(1, 2);
+  pair.setDefaultFunction(SUPLA_CHANNELFNC_LIGHTSWITCH);
+  pair.getChannel()->setNewValue(true);
+  mqtt.test_setChannelsCount(255);
+
+  const int channelNumber = pair.getChannelNumber();
+  EXPECT_CALL(mqtt,
+              publishTest(StrEq(expectedChannelTopic(channelNumber,
+                                                     "state/on")),
+                          StrEq("true"),
+                          0,
+                          true));
+  expectEmptyState(mqtt, channelNumber, "state/tilt");
+  expectEmptyState(mqtt, channelNumber, "state/is_calibrating");
+  expectEmptyState(mqtt, channelNumber, "state/shut");
+
+  mqtt.publishChannelState(channelNumber);
+}
+
+TEST_F(MqttChannelDispatchTests,
+       publishChannelStateClearsRelayRollerShutterPairUnavailableSecondary) {
+  SuplaDeviceClass sd;
+  StrictMock<MqttTestMock> mqtt(&sd);
+  initMqtt(sd, mqtt);
+
+  Supla::Control::RelayRollerShutterPair pair(1, 2);
+  pair.getSecondaryChannel()->setStateOnlineAndNotAvailable();
+  mqtt.test_setChannelsCount(255);
+
+  const int channelNumber = pair.getSecondaryChannelNumber();
+  expectEmptyState(mqtt, channelNumber, "state/on");
+  expectEmptyState(mqtt, channelNumber, "state/tilt");
+  expectEmptyState(mqtt, channelNumber, "state/is_calibrating");
+  expectEmptyState(mqtt, channelNumber, "state/shut");
+
+  mqtt.publishChannelState(channelNumber);
+}
+
 TEST_F(MqttChannelDispatchTests, subscribeChannelCoversControllableTypes) {
   SuplaDeviceClass sd;
   StrictMock<MqttTestMock> mqtt(&sd);
@@ -654,6 +715,44 @@ TEST_F(MqttChannelDispatchTests, subscribeChannelSkipsReadOnlyTypes) {
   mqtt.subscribeChannel(binarySensor.getChannelNumber());
 }
 
+TEST_F(MqttChannelDispatchTests,
+       subscribeChannelUsesRelayRollerShutterPairPrimaryCurrentFunction) {
+  SuplaDeviceClass sd;
+  StrictMock<MqttTestMock> mqtt(&sd);
+  initMqtt(sd, mqtt);
+
+  Supla::Control::RelayRollerShutterPair pair(1, 2);
+  pair.setDefaultFunction(SUPLA_CHANNELFNC_LIGHTSWITCH);
+  mqtt.test_setChannelsCount(255);
+
+  ASSERT_TRUE(pair.getChannel()->isRollerShutterRelayType());
+  EXPECT_CALL(mqtt,
+              subscribeImp(StrEq(expectedChannelTopic(pair.getChannelNumber(),
+                                                      "set/on")),
+                           0));
+  EXPECT_CALL(mqtt,
+              subscribeImp(StrEq(expectedChannelTopic(pair.getChannelNumber(),
+                                                      "execute_action")),
+                           0));
+
+  mqtt.subscribeChannel(pair.getChannelNumber());
+}
+
+TEST_F(MqttChannelDispatchTests,
+       subscribeChannelSkipsRelayRollerShutterPairUnavailableSecondary) {
+  SuplaDeviceClass sd;
+  StrictMock<MqttTestMock> mqtt(&sd);
+  initMqtt(sd, mqtt);
+
+  Supla::Control::RelayRollerShutterPair pair(1, 2);
+  pair.getSecondaryChannel()->setStateOnlineAndNotAvailable();
+  mqtt.test_setChannelsCount(255);
+
+  EXPECT_CALL(mqtt, subscribeImp(_, _)).Times(0);
+
+  mqtt.subscribeChannel(pair.getSecondaryChannelNumber());
+}
+
 TEST_F(MqttChannelDispatchTests, publishHADiscoveryCoversChannelTypes) {
   SuplaDeviceClass sd;
   StrictMock<MqttTestMock> mqtt(&sd);
@@ -758,6 +857,8 @@ TEST_F(MqttChannelDispatchTests, publishHADiscoveryCoversChannelTypes) {
                           JsonEq(jsonToString(rollerPayload)),
                           0,
                           true));
+  expectEmptyDiscovery(mqtt, "light", roller.getChannelNumber());
+  expectEmptyDiscovery(mqtt, "switch", roller.getChannelNumber());
   mqtt.publishHADiscovery(roller.getChannelNumber());
 
   auto thermometerPayload = baseDiscovery(thermometer.getChannelNumber());
@@ -1130,6 +1231,59 @@ TEST_F(MqttChannelDispatchTests,
 }
 
 TEST_F(MqttChannelDispatchTests,
+       publishHADiscoveryClearsRelayRollerShutterPairUnavailableSecondary) {
+  SuplaDeviceClass sd;
+  StrictMock<MqttTestMock> mqtt(&sd);
+  initMqtt(sd, mqtt);
+
+  Supla::Control::RelayRollerShutterPair pair(1, 2);
+  pair.getSecondaryChannel()->setStateOnlineAndNotAvailable();
+  mqtt.test_setChannelsCount(255);
+
+  const int channelNumber = pair.getSecondaryChannelNumber();
+  expectEmptyDiscovery(mqtt, "cover", channelNumber);
+  expectEmptyDiscovery(mqtt, "light", channelNumber);
+  expectEmptyDiscovery(mqtt, "switch", channelNumber);
+
+  mqtt.publishHADiscovery(channelNumber);
+}
+
+TEST_F(MqttChannelDispatchTests,
+       publishHADiscoveryUsesRelayRollerShutterPairPrimaryCurrentFunction) {
+  SuplaDeviceClass sd;
+  StrictMock<MqttTestMock> mqtt(&sd);
+  initMqtt(sd, mqtt);
+
+  Supla::Control::RelayRollerShutterPair pair(1, 2);
+  pair.setDefaultFunction(SUPLA_CHANNELFNC_LIGHTSWITCH);
+  mqtt.test_setChannelsCount(255);
+
+  const int channelNumber = pair.getChannelNumber();
+  auto payload = baseDiscoveryPayload(channelNumber);
+  payload["name"] = std::string("#") + std::to_string(channelNumber) + " " +
+                    Supla::getRelayChannelName(SUPLA_CHANNELFNC_LIGHTSWITCH);
+  payload["uniq_id"] = std::string("supla_") + kExpectedObjectPrefix + "_" +
+                       std::to_string(channelNumber) + "_0";
+  payload["qos"] = 0;
+  payload["ret"] = false;
+  payload["opt"] = false;
+  payload["stat_t"] = "~/state/on";
+  payload["cmd_t"] = "~/set/on";
+  payload["pl_on"] = "true";
+  payload["pl_off"] = "false";
+
+  EXPECT_CALL(mqtt,
+              publishTest(StrEq(expectedDiscoveryTopic(
+                              "light", channelNumber, 0)),
+                          JsonEq(jsonToString(payload)),
+                          0,
+                          true));
+  expectEmptyDiscovery(mqtt, "cover", channelNumber);
+  expectEmptyDiscovery(mqtt, "switch", channelNumber);
+  mqtt.publishHADiscovery(channelNumber);
+}
+
+TEST_F(MqttChannelDispatchTests,
        publishHADiscoveryCoversRollerShutterVariants) {
   SuplaDeviceClass sd;
   StrictMock<MqttTestMock> mqtt(&sd);
@@ -1221,6 +1375,8 @@ TEST_F(MqttChannelDispatchTests,
                             JsonEq(jsonToString(payload)),
                             0,
                             true));
+    expectEmptyDiscovery(mqtt, "light", roller.getChannelNumber());
+    expectEmptyDiscovery(mqtt, "switch", roller.getChannelNumber());
     mqtt.publishHADiscovery(roller.getChannelNumber());
   }
 }
@@ -2164,4 +2320,49 @@ TEST_F(MqttChannelDispatchTests,
       "true"));
   EXPECT_FALSE(pair.getChannel()->getValueBool());
   EXPECT_TRUE(pair.getSecondaryChannel()->getValueBool());
+}
+
+TEST_F(MqttChannelDispatchTests,
+       processDataRoutesRelayRollerShutterPairPrimaryRelayFunctionTopic) {
+  SuplaDeviceClass sd;
+  StrictMock<MqttTestMock> mqtt(&sd);
+  initMqtt(sd, mqtt);
+  DigitalInterfaceMock ioMock;
+  const int gpio0 = 1;
+  const int gpio1 = 2;
+  Supla::Control::RelayRollerShutterPair pair(gpio0, gpio1);
+  pair.setDefaultFunction(SUPLA_CHANNELFNC_LIGHTSWITCH);
+  mqtt.test_setChannelsCount(255);
+
+  ASSERT_TRUE(pair.getChannel()->isRollerShutterRelayType());
+  EXPECT_CALL(ioMock, digitalWrite(gpio0, 0)).Times(2);
+  EXPECT_CALL(ioMock, pinMode(gpio0, OUTPUT));
+  EXPECT_CALL(ioMock, digitalWrite(gpio1, 0)).Times(2);
+  EXPECT_CALL(ioMock, pinMode(gpio1, OUTPUT));
+  pair.onInit();
+
+  EXPECT_CALL(ioMock, digitalWrite(gpio0, 1));
+  EXPECT_CALL(ioMock, digitalWrite(gpio1, 1)).Times(0);
+
+  EXPECT_TRUE(mqtt.processData(
+      (expectedChannelTopic(pair.getChannelNumber(), "set/on")).c_str(),
+      "true"));
+  EXPECT_TRUE(pair.getChannel()->getValueBool());
+  EXPECT_FALSE(pair.getSecondaryChannel()->getValueBool());
+}
+
+TEST_F(MqttChannelDispatchTests,
+       processDataRejectsRelayRollerShutterPairUnavailableSecondary) {
+  SuplaDeviceClass sd;
+  StrictMock<MqttTestMock> mqtt(&sd);
+  initMqtt(sd, mqtt);
+  Supla::Control::RelayRollerShutterPair pair(1, 2);
+  pair.getSecondaryChannel()->setStateOnlineAndNotAvailable();
+  mqtt.test_setChannelsCount(255);
+
+  EXPECT_FALSE(mqtt.processData(
+      (expectedChannelTopic(pair.getSecondaryChannelNumber(), "set/on"))
+          .c_str(),
+      "true"));
+  EXPECT_FALSE(pair.getSecondaryChannel()->getValueBool());
 }

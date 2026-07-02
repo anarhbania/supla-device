@@ -37,6 +37,24 @@
 
 using Supla::Protocol::Mqtt;
 
+namespace {
+bool isRollerShutterFunction(uint32_t function) {
+  switch (function) {
+    case SUPLA_CHANNELFNC_VERTICAL_BLIND:
+    case SUPLA_CHANNELFNC_CONTROLLINGTHEFACADEBLIND:
+    case SUPLA_CHANNELFNC_CURTAIN:
+    case SUPLA_CHANNELFNC_PROJECTOR_SCREEN:
+    case SUPLA_CHANNELFNC_ROLLER_GARAGE_DOOR:
+    case SUPLA_CHANNELFNC_TERRACE_AWNING:
+    case SUPLA_CHANNELFNC_CONTROLLINGTHEROOFWINDOW:
+    case SUPLA_CHANNELFNC_CONTROLLINGTHEROLLERSHUTTER:
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
+
 Supla::Protocol::Mqtt::Mqtt(SuplaDeviceClass *sdc)
     : Supla::Protocol::ProtocolLayer(sdc) {
 }
@@ -473,6 +491,10 @@ void Supla::Protocol::Mqtt::publishChannelState(int channel) {
     SUPLA_LOG_DEBUG("Mqtt: failed to load channel object");
     return;
   }
+  if (ch->isStateOnlineAndNotAvailable()) {
+    clearStateForChannel(ch);
+    return;
+  }
 
   switch (ch->getChannelType()) {
     case SUPLA_CHANNELTYPE_RELAY: {
@@ -489,6 +511,7 @@ void Supla::Protocol::Mqtt::publishChannelState(int channel) {
         case SUPLA_CHANNELFNC_TERRACE_AWNING:
         case SUPLA_CHANNELFNC_CONTROLLINGTHEROOFWINDOW:
         case SUPLA_CHANNELFNC_CONTROLLINGTHEROLLERSHUTTER: {
+          clearRelayAlternativeStateTopics(ch, true);
           publishBool((topic / "is_calibrating").c_str(),
                       ch->getValueIsCalibrating(),
                       -1,
@@ -502,10 +525,12 @@ void Supla::Protocol::Mqtt::publishChannelState(int channel) {
         case SUPLA_CHANNELFNC_CONTROLLINGTHEGARAGEDOOR:
         case SUPLA_CHANNELFNC_CONTROLLINGTHEDOORLOCK:
         case SUPLA_CHANNELFNC_CONTROLLINGTHEGATEWAYLOCK: {
+          clearRelayAlternativeStateTopics(ch, false);
           publish((topic / "on").c_str(), "closed", -1, 1);
           break;
         }
         default: {
+          clearRelayAlternativeStateTopics(ch, false);
           publishBool((topic / "on").c_str(), ch->getValueBool(), -1, 1);
           break;
         }
@@ -878,10 +903,13 @@ void Supla::Protocol::Mqtt::subscribeChannel(int channel) {
     SUPLA_LOG_DEBUG("Mqtt: failed to load channel object");
     return;
   }
+  if (ch->isStateOnlineAndNotAvailable()) {
+    return;
+  }
 
   switch (ch->getChannelType()) {
     case SUPLA_CHANNELTYPE_RELAY: {
-      if (ch->isRollerShutterRelayType()) {
+      if (isRollerShutterFunction(ch->getDefaultFunction())) {
         subscribe((topic / "set" / "closing_percentage").c_str());
         subscribe((topic / "set" / "tilt").c_str());
       } else {
@@ -985,10 +1013,14 @@ bool Supla::Protocol::Mqtt::processData(const char *topic,
     SUPLA_LOG_DEBUG("Mqtt: failed to load channel object");
     return false;
   }
+  if (ch->isStateOnlineAndNotAvailable()) {
+    SUPLA_LOG_DEBUG("Mqtt: channel %d is not available", channel);
+    return false;
+  }
   switch (ch->getChannelType()) {
     // Relay
     case SUPLA_CHANNELTYPE_RELAY: {
-      if (ch->isRollerShutterRelayType()) {
+      if (isRollerShutterFunction(ch->getDefaultFunction())) {
         processRollerShutterRequest(part, payload, element, channel);
       } else {
         processRelayRequest(part, payload, element, ch);
@@ -1063,11 +1095,15 @@ void Supla::Protocol::Mqtt::publishHADiscovery(int channel) {
     SUPLA_LOG_DEBUG("Mqtt: failed to load channel object");
     return;
   }
+  if (ch->isStateOnlineAndNotAvailable()) {
+    clearHADiscoveryForChannel(ch);
+    return;
+  }
 
   switch (ch->getChannelType()) {
     case SUPLA_CHANNELTYPE_RELAY: {
       // publish relay state
-      if (ch->isRollerShutterRelayType()) {
+      if (isRollerShutterFunction(ch->getDefaultFunction())) {
         publishHADiscoveryRollerShutter(element);
       } else {
         publishHADiscoveryRelay(element, ch);
@@ -1258,6 +1294,8 @@ void Mqtt::publishHADiscoveryRelayImpulse(Supla::Element *element,
     return;
   }
 
+  clearHADiscoveryRelayAlternativeTypes(ch, "cover");
+
   char objectId[30] = {};
   generateObjectId(objectId, ch->getChannelNumber(), 0);
 
@@ -1376,6 +1414,7 @@ void Supla::Protocol::Mqtt::publishHADiscoveryRelay(Supla::Element *element,
 
   MqttTopic topic;
   auto chFunction = ch->getDefaultFunction();
+  const char *currentType = "light";
   HADeviceClass deviceClass = HADeviceClass_None;
   switch (chFunction) {
     case SUPLA_CHANNELFNC_CONTROLLINGTHEGATE:
@@ -1388,6 +1427,7 @@ void Supla::Protocol::Mqtt::publishHADiscoveryRelay(Supla::Element *element,
     case SUPLA_CHANNELFNC_HEATORCOLDSOURCESWITCH:
     case SUPLA_CHANNELFNC_PUMPSWITCH:
     case SUPLA_CHANNELFNC_POWERSWITCH: {
+      currentType = "switch";
       topic = getHADiscoveryTopic("switch", objectId);
       break;
     }
@@ -1396,6 +1436,7 @@ void Supla::Protocol::Mqtt::publishHADiscoveryRelay(Supla::Element *element,
       break;
     }
   }
+  clearHADiscoveryRelayAlternativeTypes(ch, currentType);
 
   const char cfg[] =
       "{"
@@ -1467,6 +1508,8 @@ void Supla::Protocol::Mqtt::publishHADiscoveryRollerShutter(
   if (ch == nullptr) {
     return;
   }
+
+  clearHADiscoveryRelayAlternativeTypes(ch, "cover");
 
   char objectId[30] = {};
   generateObjectId(objectId, element->getChannelNumber(), 0);
@@ -1595,6 +1638,87 @@ void Supla::Protocol::Mqtt::publishHADiscoveryRollerShutter(
   publish(topic.c_str(), payload, -1, 1, true);
 
   delete[] payload;
+}
+
+void Supla::Protocol::Mqtt::clearHADiscoveryRelayAlternativeTypes(
+    Supla::Channel *channel,
+    const char *currentType) {
+  if (channel == nullptr || currentType == nullptr ||
+      !channel->isRollerShutterRelayType()) {
+    return;
+  }
+
+  char objectId[30] = {};
+  generateObjectId(objectId, channel->getChannelNumber(), 0);
+
+  const char *types[] = {"cover", "light", "switch"};
+  for (const auto *type : types) {
+    if (strcmp(type, currentType) == 0) {
+      continue;
+    }
+    auto topic = getHADiscoveryTopic(type, objectId);
+    publish(topic.c_str(), "", -1, 1, true);
+  }
+}
+
+void Supla::Protocol::Mqtt::clearHADiscoveryForChannel(
+    Supla::Channel *channel) {
+  if (channel == nullptr) {
+    return;
+  }
+
+  char objectId[30] = {};
+  generateObjectId(objectId, channel->getChannelNumber(), 0);
+
+  switch (channel->getChannelType()) {
+    case SUPLA_CHANNELTYPE_RELAY: {
+      const char *types[] = {"cover", "light", "switch"};
+      for (const auto *type : types) {
+        auto topic = getHADiscoveryTopic(type, objectId);
+        publish(topic.c_str(), "", -1, 1, true);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+void Supla::Protocol::Mqtt::clearRelayAlternativeStateTopics(
+    Supla::Channel *channel,
+    bool currentIsRoller) {
+  if (channel == nullptr || !channel->isRollerShutterRelayType()) {
+    return;
+  }
+
+  auto topic = MqttTopic("channels") / channel->getChannelNumber() / "state";
+  if (currentIsRoller) {
+    publish((topic / "on").c_str(), "", -1, 1);
+  } else {
+    publish((topic / "tilt").c_str(), "", -1, 1);
+    publish((topic / "is_calibrating").c_str(), "", -1, 1);
+    publish((topic / "shut").c_str(), "", -1, 1);
+  }
+}
+
+void Supla::Protocol::Mqtt::clearStateForChannel(Supla::Channel *channel) {
+  if (channel == nullptr) {
+    return;
+  }
+
+  switch (channel->getChannelType()) {
+    case SUPLA_CHANNELTYPE_RELAY: {
+      auto topic = MqttTopic("channels") / channel->getChannelNumber() /
+                   "state";
+      publish((topic / "on").c_str(), "", -1, 1);
+      publish((topic / "tilt").c_str(), "", -1, 1);
+      publish((topic / "is_calibrating").c_str(), "", -1, 1);
+      publish((topic / "shut").c_str(), "", -1, 1);
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 void Supla::Protocol::Mqtt::publishHADiscoveryThermometer(

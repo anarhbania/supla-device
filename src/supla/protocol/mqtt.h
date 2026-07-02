@@ -168,6 +168,12 @@ class Mqtt : public ProtocolLayer {
   void publishHADiscoveryRelay(Supla::Element *, Supla::Channel *);
   void publishHADiscoveryRelayImpulse(Supla::Element *);
   void publishHADiscoveryRelayImpulse(Supla::Element *, Supla::Channel *);
+  void clearHADiscoveryRelayAlternativeTypes(Supla::Channel *channel,
+                                             const char *currentType);
+  void clearHADiscoveryForChannel(Supla::Channel *channel);
+  void clearRelayAlternativeStateTopics(Supla::Channel *channel,
+                                        bool currentIsRoller);
+  void clearStateForChannel(Supla::Channel *channel);
   void publishHADiscoveryThermometer(Supla::Element *);
   void publishHADiscoveryHumidity(Supla::Element *);
   void publishHADiscoveryActionTrigger(Supla::Element *);

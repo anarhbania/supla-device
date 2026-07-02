@@ -272,13 +272,16 @@ void ProtocolParameters::send(Supla::WebSender* sender) {
               });
             });
 
-            sender->numberInput("mqttport",
-                                {
-                                    .min = 1,
-                                    .max = 65535,
-                                    .value = cfg->getMqttServerPort(),
-                                    .step = 1,
-                                });
+            sender->formField([&]() {
+              sender->labelFor("mqttport", "Port");
+              sender->numberInput("mqttport",
+                                  {
+                                      .min = 1,
+                                      .max = 65535,
+                                      .value = cfg->getMqttServerPort(),
+                                      .step = 1,
+                                  });
+            });
 
             sender->formField([&]() {
               sender->labelFor("mqttauth", "Auth");
@@ -305,6 +308,7 @@ void ProtocolParameters::send(Supla::WebSender* sender) {
               sender->labelFor("mqttpasswd", "Password (required, max 255)");
               auto input = sender->voidTag("input");
               input.attr("maxlength", 255)
+                  .attr("type", "password")
                   .attr("name", "mqttpasswd")
                   .attr("id", "mqttpasswd")
                   .finish();
@@ -322,13 +326,16 @@ void ProtocolParameters::send(Supla::WebSender* sender) {
               input.finish();
             });
 
-            sender->numberInput("mqttqos",
-                                {
-                                    .min = 0,
-                                    .max = 2,
-                                    .value = cfg->getMqttQos(),
-                                    .step = 1,
-                                });
+            sender->formField([&]() {
+              sender->labelFor("mqttqos", "QoS");
+              sender->numberInput("mqttqos",
+                                  {
+                                      .min = 0,
+                                      .max = 2,
+                                      .value = cfg->getMqttQos(),
+                                      .step = 1,
+                                  });
+            });
 
             sender->formField([&]() {
               sender->labelFor("mqttretain", "Retain");
