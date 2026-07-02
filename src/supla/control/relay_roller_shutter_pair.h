@@ -137,6 +137,7 @@ class RelayRollerShutterPair : public ElementWithChannelActions {
   RelayRollerShutterPair &setDefaultStateOn();
   RelayRollerShutterPair &setDefaultStateOff();
   RelayRollerShutterPair &setDefaultStateRestore();
+  RelayRollerShutterPair &setPreloadStateOnSoftReset(bool enabled = true);
   bool setDefaultFunctions(uint32_t primaryFunction,
                            uint32_t secondaryFunction);
   RollerShutter *getRollerShutter();
@@ -218,6 +219,7 @@ class RelayRollerShutterPair : public ElementWithChannelActions {
 
   bool rollerModeActive = false;
   bool buttonActionsInitialized = false;
+  bool loadingConfig = false;
   ButtonListElement *buttonList = nullptr;
 };
 

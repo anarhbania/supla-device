@@ -18,6 +18,7 @@
 
 #include "interrupt_ac_to_dc_io.h"
 
+#include <supla/input_noise_guard.h>
 #include <supla/log_wrapper.h>
 #include <supla/time.h>
 #include <driver/gpio.h>
@@ -137,6 +138,18 @@ bool InterruptAcToDcIo::isReady() const {
   return initialized && initCounter == 0;
 }
 
+void InterruptAcToDcIo::enableInputNoiseGuardForGpio(int gpio, bool enabled) {
+  if (gpio < 0 || gpio >= INTERRUPT_AC_TO_DC_IO_MAX_GPIOS) {
+    SUPLA_LOG_ERROR("InterruptAcToDcIo: Invalid GPIO number %d", gpio);
+    return;
+  }
+  gpioInputNoiseGuardEnabled[gpio] = enabled ? 1 : 0;
+}
+
+void InterruptAcToDcIo::disableInputNoiseGuardForGpio(int gpio) {
+  enableInputNoiseGuardForGpio(gpio, false);
+}
+
 uint8_t InterruptAcToDcIo::getMaxInterruptBurst(uint32_t elapsedMs) const {
   uint32_t maxBurst = INTERRUPT_AC_TO_DC_IO_MAX_BURST_BASE +
       (elapsedMs + INTERRUPT_AC_TO_DC_IO_MAX_BURST_PER_MS_DIVISOR - 1) /
@@ -181,6 +194,18 @@ void InterruptAcToDcIo::onFastTimer() {
       gpioInterruptCounts[i] = 0;
     }
     portEXIT_CRITICAL(&gpioInterruptCountsMux);
+
+    if (gpioInputNoiseGuardEnabled[i] &&
+        Supla::InputNoiseGuard::IsActive()) {
+      gpioRawActivitySeen[i] = 0;
+      gpioLastRawTimestampMs[i] = 0;
+      gpioAcCandidatePackets[i] = 0;
+      gpioAcCandidateFirstTimestampMs[i] = 0;
+      if (gpioState[i] == 1 || gpioState[i] == 2) {
+        gpioLastTimestampMs[i] = now;
+      }
+      continue;
+    }
 
     if (interruptCount > 0) {
 //      SUPLA_LOG_DEBUG("GPIO %d INTR COUNT %d", i, interruptCount);

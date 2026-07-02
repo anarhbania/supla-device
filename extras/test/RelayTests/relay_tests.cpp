@@ -17,6 +17,7 @@
 */
 
 #include <arduino_mock.h>
+#include <board_mock.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <protocol_layer_mock.h>
@@ -36,6 +37,7 @@
 using ::testing::_;
 using ::testing::AtLeast;
 using ::testing::DoAll;
+using ::testing::InSequence;
 using ::testing::Pointee;
 using ::testing::Return;
 using ::testing::SetArgPointee;
@@ -72,10 +74,12 @@ class RelayFixture : public testing::Test {
 
   void SetUp() {
     Supla::Channel::resetToDefaults();
+    setLastResetSoft(false);
     EXPECT_CALL(storage, scheduleSave(_, 2000)).WillRepeatedly(Return());
   }
 
   void TearDown() {
+    setLastResetSoft(false);
     Supla::Channel::resetToDefaults();
   }
 
@@ -119,6 +123,34 @@ TEST_F(RelayFixture, IoPinConstructorUsesConfiguredIoAndPolarity) {
   Supla::Control::Relay relay(outputPin);
   relay.onInit();
   EXPECT_FALSE(relay.isOn());
+}
+
+TEST_F(RelayFixture, SoftResetKeepsLegacyInitOrderByDefault) {
+  const int gpio = 11;
+  Supla::Control::Relay relay(gpio);
+  relay.setDefaultStateOn();
+  setLastResetSoft(true);
+
+  InSequence sequence;
+  EXPECT_CALL(ioMock, pinMode(gpio, OUTPUT));
+  EXPECT_CALL(ioMock, digitalWrite(gpio, 1));
+
+  relay.onInit();
+}
+
+TEST_F(RelayFixture, SoftResetPreloadsStateBeforePinModeWhenEnabled) {
+  const int gpio = 11;
+  Supla::Control::Relay relay(gpio);
+  relay.setDefaultStateOn();
+  relay.setPreloadStateOnSoftReset();
+  setLastResetSoft(true);
+
+  InSequence sequence;
+  EXPECT_CALL(ioMock, digitalWrite(gpio, 1));
+  EXPECT_CALL(ioMock, pinMode(gpio, OUTPUT));
+  EXPECT_CALL(ioMock, digitalWrite(gpio, 1));
+
+  relay.onInit();
 }
 
 TEST_F(RelayFixture, UnsetIoPinDoesNothing) {

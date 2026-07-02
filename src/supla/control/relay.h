@@ -67,6 +67,7 @@ class Relay : public ChannelElement, public ActionHandler {
   virtual Relay &setDefaultStateOn();
   virtual Relay &setDefaultStateOff();
   virtual Relay &setDefaultStateRestore();
+  virtual Relay &setPreloadStateOnSoftReset(bool enabled = true);
   virtual Relay &keepTurnOnDuration(bool keep = true);  // DEPREACATED
 
   [[deprecated("Use IoPin::writeActive/writeInactive instead")]]
@@ -242,6 +243,7 @@ class Relay : public ChannelElement, public ActionHandler {
   bool initDone = false;
   bool restartTimerOnToggle = false;
   bool skipInitialStateSetting = false;
+  bool preloadStateOnSoftReset = false;
 
   int8_t stateOnInit = STATE_ON_INIT_OFF;
   Supla::Io::IoPin outputPin;

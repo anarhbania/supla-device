@@ -53,6 +53,8 @@ class InterruptAcToDcIo : public Io::Base, public Element {
 
   void onFastTimer() override;
   void setOffStateLevel(uint8_t level);
+  void enableInputNoiseGuardForGpio(int gpio, bool enabled = true);
+  void disableInputNoiseGuardForGpio(int gpio);
 
  protected:
   uint8_t getMaxInterruptBurst(uint32_t elapsedMs) const;
@@ -68,6 +70,7 @@ class InterruptAcToDcIo : public Io::Base, public Element {
   uint8_t gpioMinQuietBeforeNextActivityMs[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] =
       {};
   uint8_t gpioRawActivitySeen[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
+  uint8_t gpioInputNoiseGuardEnabled[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
   bool initialized = false;
   uint8_t offStateLevel = 0;
   uint32_t initCounter = 100;

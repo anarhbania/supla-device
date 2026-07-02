@@ -330,7 +330,7 @@ void Relay::onInit() {
 
   if (!skipInitialStateSetting) {
     uint32_t duration = durationMs;
-    if (!isLastResetSoft()) {
+    if (!isLastResetSoft() || preloadStateOnSoftReset) {
       if (stateOn) {
         turnOn(duration);
       } else {
@@ -776,6 +776,11 @@ Relay &Relay::setDefaultStateOff() {
 
 Relay &Relay::setDefaultStateRestore() {
   stateOnInit = STATE_ON_INIT_RESTORE;
+  return *this;
+}
+
+Relay &Relay::setPreloadStateOnSoftReset(bool enabled) {
+  preloadStateOnSoftReset = enabled;
   return *this;
 }
 

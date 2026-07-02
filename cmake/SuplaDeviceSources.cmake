@@ -23,6 +23,7 @@ set(SUPLA_DEVICE_SRCS
   ${SUPLA_DEVICE_SRC_DIR}/supla/action_handler.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/time.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/timer.cpp
+  ${SUPLA_DEVICE_SRC_DIR}/supla/input_noise_guard.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/mutex.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/esp_idf_mutex.cpp
   ${SUPLA_DEVICE_SRC_DIR}/supla/auto_lock.cpp

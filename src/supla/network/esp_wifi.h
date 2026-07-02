@@ -21,6 +21,7 @@
 
 #include <Arduino.h>
 
+#include <supla/input_noise_guard.h>
 #include <supla/log_wrapper.h>
 #include <supla/network/arduino_netif_config.h>
 #include <supla/tools.h>
@@ -95,6 +96,7 @@ class ESPWifi : public Supla::Wifi {
           [](WiFiEvent_t event, WiFiEventInfo_t info) {
           SUPLA_LOG_INFO("WiFi Station disconnected");
             // ESP32 doesn't reconnect automatically after lost connection
+            Supla::InputNoiseGuard::NotifyWifiTransition();
             WiFi.reconnect();
           },
           WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
@@ -103,22 +105,28 @@ class ESPWifi : public Supla::Wifi {
 #endif
     } else {
       if (mode == Supla::DEVICE_MODE_CONFIG) {
+        Supla::InputNoiseGuard::NotifyWifiTransition();
         WiFi.mode(WIFI_MODE_AP);
       } else {
+        Supla::InputNoiseGuard::NotifyWifiTransition();
         WiFi.mode(WIFI_MODE_STA);
       }
       SUPLA_LOG_INFO("WiFi: resetting WiFi connection");
       DisconnectProtocols();
+      Supla::InputNoiseGuard::NotifyWifiTransition();
       WiFi.disconnect();
     }
 
     if (mode == Supla::DEVICE_MODE_CONFIG) {
       SUPLA_LOG_INFO("WiFi: enter config mode with SSID: \"%s\"", hostname);
+      Supla::InputNoiseGuard::NotifyWifiTransition();
       WiFi.mode(WIFI_MODE_AP);
+      Supla::InputNoiseGuard::NotifyWifiTransition();
       WiFi.softAP(hostname, nullptr, 6);
 
     } else {
       SUPLA_LOG_INFO("WiFi: establishing connection with SSID: \"%s\"", ssid);
+      Supla::InputNoiseGuard::NotifyWifiTransition();
       WiFi.mode(WIFI_MODE_STA);
       if (hasStaticIpConfig()) {
         const auto &cfg = getNetifConfig();
@@ -131,6 +139,7 @@ class ESPWifi : public Supla::Wifi {
           SUPLA_LOG_WARNING("WiFi static IP config failed, continuing");
         }
       }
+      Supla::InputNoiseGuard::NotifyWifiTransition();
       WiFi.begin(ssid, password);
       // ESP8266 requires setHostname to be called after begin...
       WiFi.setHostname(hostname);
@@ -177,7 +186,9 @@ class ESPWifi : public Supla::Wifi {
   }
 
   void uninit() override {
+    Supla::InputNoiseGuard::NotifyWifiTransition();
     WiFi.softAPdisconnect(true);
+    Supla::InputNoiseGuard::NotifyWifiTransition();
     WiFi.disconnect(true);
   }
 

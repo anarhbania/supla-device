@@ -33,6 +33,7 @@
 
 #include <SuplaDevice.h>
 #include <fcntl.h>
+#include <supla/input_noise_guard.h>
 #include <supla/storage/config.h>
 #include <supla/storage/storage.h>
 #include <supla/supla_lib_config.h>
@@ -114,6 +115,7 @@ static void eventHandler(void *arg,
         SUPLA_LOG_DEBUG("[%s] Starting connection to AP",
                         thisNetIntfPtr->getIntfName());
         firstWiFiScanDone = false;
+        Supla::InputNoiseGuard::NotifyWifiTransition();
         esp_wifi_connect();
         break;
       }
@@ -149,6 +151,7 @@ static void eventHandler(void *arg,
           }
         }
         if (!thisNetIntfPtr->isInConfigMode()) {
+          Supla::InputNoiseGuard::NotifyWifiTransition();
           esp_wifi_connect();
           SUPLA_LOG_DEBUG(
                     "[%s] Connect to the AP fail (reason %d). Trying again",
@@ -233,6 +236,7 @@ void Supla::EspIdfWifi::setup() {
 #endif /*SUPLA_DEVICE_ESP32*/
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    Supla::InputNoiseGuard::NotifyWifiTransition();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_event_handler_register(
@@ -271,6 +275,7 @@ void Supla::EspIdfWifi::setup() {
     wifi_config.ap.channel = 6;
     wifi_config.ap.beacon_interval = 200;
 
+    Supla::InputNoiseGuard::NotifyWifiTransition();
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     uint8_t proto = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G;
@@ -302,6 +307,7 @@ void Supla::EspIdfWifi::setup() {
       wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     }
 
+    Supla::InputNoiseGuard::NotifyWifiTransition();
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
 #ifdef SUPLA_DEVICE_ESP32
@@ -336,6 +342,7 @@ void Supla::EspIdfWifi::setup() {
   }
   delay(50);
 
+  Supla::InputNoiseGuard::NotifyWifiTransition();
   ESP_ERROR_CHECK(esp_wifi_start());
   if (txPower >= 0) {
     SUPLA_LOG_INFO("[%s] setting TX power to %d", getIntfName(), txPower);
@@ -370,7 +377,9 @@ void Supla::EspIdfWifi::disable() {
                     secondChannel);
     lastChannel = channel;
   }
+  Supla::InputNoiseGuard::NotifyWifiTransition();
   esp_wifi_disconnect();
+  Supla::InputNoiseGuard::NotifyWifiTransition();
   ESP_ERROR_CHECK(esp_wifi_stop());
 }
 
@@ -384,6 +393,7 @@ void Supla::EspIdfWifi::uninit() {
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, eventHandler);
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_LOST_IP, eventHandler);
     esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, eventHandler);
+    Supla::InputNoiseGuard::NotifyWifiTransition();
     esp_wifi_stop();
 #ifdef SUPLA_DEVICE_ESP32
     if (apNetIf) {

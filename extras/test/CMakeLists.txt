@@ -69,6 +69,7 @@ file(GLOB TEST_SRC CONFIGURE_DEPENDS
   SensorTests/*.cpp
   ChannelElementTests/*.cpp
   InternalPinOutputTests/*.cpp
+  InputNoiseGuardTests/*.cpp
   BlinkingLedTests/*.cpp
   PinStatusLedTests/*.cpp
   ConditionTests/*.cpp

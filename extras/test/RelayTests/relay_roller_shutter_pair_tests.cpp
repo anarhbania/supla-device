@@ -10,6 +10,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <arduino_mock.h>
+#include <board_mock.h>
 #include <config_mock.h>
 #include <protocol_layer_mock.h>
 #include <simple_time.h>
@@ -24,6 +25,7 @@
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::DoAll;
+using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::SetArgPointee;
@@ -41,10 +43,12 @@ class RelayRollerShutterPairFixture : public testing::Test {
 
   void SetUp() override {
     Supla::Channel::resetToDefaults();
+    setLastResetSoft(false);
     EXPECT_CALL(storage, scheduleSave(_, 2000)).WillRepeatedly(Return());
   }
 
   void TearDown() override {
+    setLastResetSoft(false);
     Supla::Channel::resetToDefaults();
   }
 
@@ -107,6 +111,24 @@ TEST_F(RelayRollerShutterPairFixture,
                SUPLA_BIT_FUNC_CONTROLLINGTHEFACADEBLIND);
   EXPECT_FALSE(pair.getChannel()->getFuncList() &
                SUPLA_BIT_FUNC_VERTICAL_BLIND);
+}
+
+TEST_F(RelayRollerShutterPairFixture,
+       SoftResetPreloadStateOptionIsAppliedToBothRelays) {
+  Supla::Control::RelayRollerShutterPair pair(gpio0, gpio1);
+  pair.setDefaultStateOn();
+  pair.setPreloadStateOnSoftReset();
+  setLastResetSoft(true);
+
+  InSequence sequence;
+  EXPECT_CALL(ioMock, digitalWrite(gpio0, 1));
+  EXPECT_CALL(ioMock, pinMode(gpio0, OUTPUT));
+  EXPECT_CALL(ioMock, digitalWrite(gpio0, 1));
+  EXPECT_CALL(ioMock, digitalWrite(gpio1, 1));
+  EXPECT_CALL(ioMock, pinMode(gpio1, OUTPUT));
+  EXPECT_CALL(ioMock, digitalWrite(gpio1, 1));
+
+  pair.onInit();
 }
 
 TEST_F(RelayRollerShutterPairFixture,
@@ -203,6 +225,45 @@ TEST_F(RelayRollerShutterPairFixture, ReportsCurrentMode) {
 
   EXPECT_TRUE(pair.isInRelayMode());
   EXPECT_FALSE(pair.isInRollerShutterMode());
+}
+
+TEST_F(RelayRollerShutterPairFixture,
+       PreInitFunctionRestoreDoesNotSwitchPhysicalOutputs) {
+  ConfigMock config;
+  Supla::Control::RelayRollerShutterPair pair(gpio0, gpio1);
+  pair.setDefaultFunctions(SUPLA_CHANNELFNC_CONTROLLINGTHEROLLERSHUTTER,
+                           SUPLA_CHANNELFNC_LIGHTSWITCH);
+  int32_t primaryFunction = SUPLA_CHANNELFNC_LIGHTSWITCH;
+
+  EXPECT_TRUE(pair.isInRollerShutterMode());
+  EXPECT_CALL(config, init()).WillRepeatedly(Return(true));
+  EXPECT_CALL(config, getInt32(StrEq("0_fnc"), _))
+      .Times(1)
+      .WillOnce(DoAll(SetArgPointee<1>(primaryFunction), Return(true)));
+  EXPECT_CALL(config, getUInt8(StrEq("0_cfg_chng"), _))
+      .Times(1)
+      .WillOnce(Return(false));
+  EXPECT_CALL(config, getInt32(StrEq("1_fnc"), _))
+      .Times(1)
+      .WillOnce(Return(false));
+  EXPECT_CALL(config, getUInt8(StrEq("1_cfg_chng"), _))
+      .Times(1)
+      .WillOnce(Return(false));
+  EXPECT_CALL(config,
+              getBlob(StrEq("0_rs_cfg"),
+                      _,
+                      sizeof(Supla::Control::RollerShutterConfig)))
+      .Times(1)
+      .WillOnce(Return(false));
+
+  EXPECT_CALL(ioMock, digitalWrite(gpio0, _)).Times(0);
+  EXPECT_CALL(ioMock, digitalWrite(gpio1, _)).Times(0);
+  EXPECT_CALL(ioMock, pinMode(gpio0, OUTPUT)).Times(0);
+  EXPECT_CALL(ioMock, pinMode(gpio1, OUTPUT)).Times(0);
+
+  pair.onLoadConfig(nullptr);
+
+  EXPECT_TRUE(pair.isInRelayMode());
 }
 
 TEST_F(RelayRollerShutterPairFixture, RestoresManagedRelayStatesOnInit) {
@@ -674,8 +735,8 @@ TEST_F(RelayRollerShutterPairFixture,
                       sizeof(Supla::Control::TiltConfig)))
       .Times(1)
       .WillOnce(Return(false));
-  EXPECT_CALL(ioMock, digitalWrite(gpio0, 0)).Times(testing::AtLeast(1));
-  EXPECT_CALL(ioMock, digitalWrite(gpio1, 0)).Times(testing::AtLeast(1));
+  EXPECT_CALL(ioMock, digitalWrite(gpio0, _)).Times(0);
+  EXPECT_CALL(ioMock, digitalWrite(gpio1, _)).Times(0);
 
   pair.onLoadConfig(nullptr);
 }
@@ -710,8 +771,8 @@ TEST_F(RelayRollerShutterPairFixture,
                       _,
                       sizeof(Supla::Control::TiltConfig)))
       .Times(0);
-  EXPECT_CALL(ioMock, digitalWrite(gpio0, 0)).Times(testing::AtLeast(1));
-  EXPECT_CALL(ioMock, digitalWrite(gpio1, 0)).Times(testing::AtLeast(1));
+  EXPECT_CALL(ioMock, digitalWrite(gpio0, _)).Times(0);
+  EXPECT_CALL(ioMock, digitalWrite(gpio1, _)).Times(0);
 
   pair.onLoadConfig(nullptr);
 }
@@ -741,8 +802,8 @@ TEST_F(RelayRollerShutterPairFixture,
                       sizeof(Supla::Control::RollerShutterConfig)))
       .Times(1)
       .WillOnce(Return(false));
-  EXPECT_CALL(ioMock, digitalWrite(gpio0, 0)).Times(testing::AtLeast(1));
-  EXPECT_CALL(ioMock, digitalWrite(gpio1, 0)).Times(testing::AtLeast(1));
+  EXPECT_CALL(ioMock, digitalWrite(gpio0, _)).Times(0);
+  EXPECT_CALL(ioMock, digitalWrite(gpio1, _)).Times(0);
 
   pair.onLoadConfig(nullptr);
 

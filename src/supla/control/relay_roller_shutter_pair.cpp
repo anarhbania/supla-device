@@ -466,6 +466,13 @@ RelayRollerShutterPair &RelayRollerShutterPair::setDefaultStateRestore() {
   return *this;
 }
 
+RelayRollerShutterPair &RelayRollerShutterPair::setPreloadStateOnSoftReset(
+    bool enabled) {
+  relay0.setPreloadStateOnSoftReset(enabled);
+  relay1.setPreloadStateOnSoftReset(enabled);
+  return *this;
+}
+
 bool RelayRollerShutterPair::setDefaultFunctions(
     uint32_t primaryFunction,
     uint32_t secondaryFunction) {
@@ -799,7 +806,9 @@ uint32_t RelayRollerShutterPair::getCalcfgPendingTimeoutMs(
 }
 
 void RelayRollerShutterPair::onLoadConfig(SuplaDeviceClass *sdc) {
+  loadingConfig = true;
   loadFunctionFromConfig();
+  loadingConfig = false;
   loadConfigChangeFlag();
   relay0.loadEngineConfigOnly();
   relay1.onLoadConfig(sdc);
@@ -880,6 +889,10 @@ void RelayRollerShutterPair::onTimer() {
 void RelayRollerShutterPair::onFunctionChange(uint32_t currentFunction,
                                               uint32_t newFunction) {
   (void)(currentFunction);
+  if (loadingConfig) {
+    applyRuntimeMode();
+    return;
+  }
   if (isRollerFunction(newFunction)) {
     switchToRollerMode();
   } else {
