@@ -23,10 +23,9 @@
 // https://github.com/adafruit/Adafruit_Si7021
 
 #include <Adafruit_Si7021.h>
+#include <supla/log_wrapper.h>
 
 #include "therm_hygro_meter.h"
-
-#include <supla/log_wrapper.h>
 
 namespace Supla {
 namespace Sensor {
