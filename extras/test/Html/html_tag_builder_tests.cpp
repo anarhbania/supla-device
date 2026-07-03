@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  */
 
-#include <config_mock.h>
 #include <SuplaDevice.h>
+#include <config_mock.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <network_mock.h>
@@ -403,6 +403,136 @@ TEST_F(HtmlTagBuilderTests, WifiParametersShowsScanQualityForSavedSsid) {
   EXPECT_THAT(sendHtml, HasSubstr("Found in Wi-Fi scan"));
   EXPECT_THAT(sendHtml, HasSubstr("RSSI -74 dBm"));
   EXPECT_THAT(sendHtml, HasSubstr("quality 52%"));
+  EXPECT_THAT(sendHtml,
+              HasSubstr("<div class=\"hint\" id=\"wifi_scan_hint\">"));
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersHighlightsWeakScanQuality) {
+  ConfigMock cfg;
+  SenderMock sender;
+  sendHtml.clear();
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+  cache->addOrUpdate("ssid_weak", -83, 6);
+  cache->finishUpdate(millis());
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, getUInt8(StrEq(Supla::WifiDisableTag), _))
+      .WillOnce([](const char*, uint8_t* value) {
+        *value = 0;
+        return true;
+      });
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillOnce([](char* ssid) {
+    std::memcpy(ssid, "ssid_weak", sizeof("ssid_weak"));
+    return true;
+  });
+  EXPECT_CALL(cfg, loadNetifConfig(StrEq(Supla::ConfigTag::WifiNetifCfgTag), _))
+      .WillOnce(Return(false));
+  EXPECT_CALL(sender, send(_, _))
+      .WillRepeatedly(
+          [this](const char* data, int size) { appendSentHtml(data, size); });
+
+  {
+    NetworkMock net1;
+    NetworkMock net2;
+    (void)net1;
+    (void)net2;
+
+    Supla::Html::WifiParameters params;
+    params.send(&sender);
+  }
+
+  EXPECT_THAT(sendHtml,
+              HasSubstr("<div class=\"hint warn\" id=\"wifi_scan_hint\">"));
+  EXPECT_THAT(sendHtml, HasSubstr("quality 34%"));
+  EXPECT_THAT(sendHtml,
+              HasSubstr("wifiScanHintClasses['ssid_weak']='hint warn'"));
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersHighlightsVeryWeakScanQuality) {
+  ConfigMock cfg;
+  SenderMock sender;
+  sendHtml.clear();
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+  cache->addOrUpdate("ssid_bad", -90, 6);
+  cache->finishUpdate(millis());
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, getUInt8(StrEq(Supla::WifiDisableTag), _))
+      .WillOnce([](const char*, uint8_t* value) {
+        *value = 0;
+        return true;
+      });
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillOnce([](char* ssid) {
+    std::memcpy(ssid, "ssid_bad", sizeof("ssid_bad"));
+    return true;
+  });
+  EXPECT_CALL(cfg, loadNetifConfig(StrEq(Supla::ConfigTag::WifiNetifCfgTag), _))
+      .WillOnce(Return(false));
+  EXPECT_CALL(sender, send(_, _))
+      .WillRepeatedly(
+          [this](const char* data, int size) { appendSentHtml(data, size); });
+
+  {
+    NetworkMock net1;
+    NetworkMock net2;
+    (void)net1;
+    (void)net2;
+
+    Supla::Html::WifiParameters params;
+    params.send(&sender);
+  }
+
+  EXPECT_THAT(sendHtml,
+              HasSubstr("<div class=\"hint error\" id=\"wifi_scan_hint\">"));
+  EXPECT_THAT(sendHtml, HasSubstr("quality 20%"));
+  EXPECT_THAT(sendHtml,
+              HasSubstr("wifiScanHintClasses['ssid_bad']='hint error'"));
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersHighlightsNotFoundNetworkAsWarning) {
+  ConfigMock cfg;
+  SenderMock sender;
+  sendHtml.clear();
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+  cache->addOrUpdate("other_ssid", -50, 6);
+  cache->finishUpdate(millis());
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, getUInt8(StrEq(Supla::WifiDisableTag), _))
+      .WillOnce([](const char*, uint8_t* value) {
+        *value = 0;
+        return true;
+      });
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillOnce([](char* ssid) {
+    std::memcpy(ssid, "hidden_ssid", sizeof("hidden_ssid"));
+    return true;
+  });
+  EXPECT_CALL(cfg, loadNetifConfig(StrEq(Supla::ConfigTag::WifiNetifCfgTag), _))
+      .WillOnce(Return(false));
+  EXPECT_CALL(sender, send(_, _))
+      .WillRepeatedly(
+          [this](const char* data, int size) { appendSentHtml(data, size); });
+
+  {
+    NetworkMock net1;
+    NetworkMock net2;
+    (void)net1;
+    (void)net2;
+
+    Supla::Html::WifiParameters params;
+    params.send(&sender);
+  }
+
+  EXPECT_THAT(sendHtml,
+              HasSubstr("<div class=\"hint warn\" id=\"wifi_scan_hint\">"));
+  EXPECT_THAT(sendHtml, HasSubstr("Warning: this network was not found"));
+  EXPECT_THAT(sendHtml, HasSubstr("h.className='hint warn';"));
 }
 
 TEST_F(HtmlTagBuilderTests, WifiParametersKeepsSsidInputAndAddsDatalist) {
@@ -455,9 +585,11 @@ TEST_F(HtmlTagBuilderTests, WifiParametersKeepsSsidInputAndAddsDatalist) {
   EXPECT_THAT(sendHtml, HasSubstr("<option value=\"ssid_other\">"));
   EXPECT_THAT(sendHtml, HasSubstr("RSSI -74 dBm, quality 52%, ch 6"));
   EXPECT_THAT(sendHtml, HasSubstr("var wifiScanHints=Object.create(null);"));
+  EXPECT_THAT(sendHtml,
+              HasSubstr("var wifiScanHintClasses=Object.create(null);"));
   EXPECT_THAT(sendHtml, HasSubstr("function wifiSsidChanged()"));
   EXPECT_THAT(sendHtml,
-              HasSubstr("h.textContent=wifiScanHints[e.value]||"));
+              HasSubstr("h.className=wifiScanHintClasses[e.value]||'hint';"));
 }
 
 TEST_F(HtmlTagBuilderTests, WifiParametersEscapesSsidForDatalistScript) {
@@ -503,8 +635,7 @@ TEST_F(HtmlTagBuilderTests, WifiParametersEscapesSsidForDatalistScript) {
   EXPECT_THAT(sendHtml, HasSubstr("\\x3C/script\\x3E\\x26']"));
 }
 
-TEST_F(HtmlTagBuilderTests,
-       WifiParametersLogsScanResultToLastStateOnWifiSave) {
+TEST_F(HtmlTagBuilderTests, WifiParametersLogsScanResultToLastStateOnWifiSave) {
   ConfigMock cfg;
   DummyWebServer server;
   SuplaDeviceClass sdc;
@@ -531,7 +662,7 @@ TEST_F(HtmlTagBuilderTests,
   }
 
   ASSERT_TRUE(logger->prepareLastStateLog());
-  char *log = logger->getLog();
+  char* log = logger->getLog();
   ASSERT_NE(nullptr, log);
   EXPECT_THAT(log, HasSubstr("Wi-Fi: \"ssid_test\" found"));
   EXPECT_THAT(log, HasSubstr("RSSI -74 dBm"));
@@ -594,7 +725,7 @@ TEST_F(HtmlTagBuilderTests, WifiParametersDeduplicatesSameScanLastState) {
   }
 
   ASSERT_TRUE(logger->prepareLastStateLog());
-  char *log = logger->getLog();
+  char* log = logger->getLog();
   ASSERT_NE(nullptr, log);
   EXPECT_THAT(log, HasSubstr("Wi-Fi: \"ssid_dedup\" found"));
   EXPECT_EQ(nullptr, logger->getLog());
@@ -634,7 +765,7 @@ TEST_F(HtmlTagBuilderTests, WifiParametersLogsScanLastStateWhenMessageChanges) {
   }
 
   ASSERT_TRUE(logger->prepareLastStateLog());
-  char *log = logger->getLog();
+  char* log = logger->getLog();
   ASSERT_NE(nullptr, log);
   EXPECT_THAT(log, HasSubstr("RSSI -50 dBm"));
   log = logger->getLog();

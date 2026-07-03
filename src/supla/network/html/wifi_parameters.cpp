@@ -107,6 +107,29 @@ void formatWifiScanMessage(char *message,
   }
 }
 
+const char *wifiScanHintClass(const char *ssid) {
+  WifiScanResult result = {};
+  auto status = WifiScanResultCache::Instance()->lookup(
+      ssid, &result, millis(), WifiScanDefaultMaxAgeMs);
+
+  if (status == WifiScanLookupStatus::NotFound) {
+    return "hint warn";
+  }
+
+  if (status != WifiScanLookupStatus::Found) {
+    return "hint";
+  }
+
+  int quality = Supla::rssiToSignalStrength(result.rssi);
+  if (quality <= 20) {
+    return "hint error";
+  }
+  if (quality <= 35) {
+    return "hint warn";
+  }
+  return "hint";
+}
+
 void sendJsString(Supla::WebSender *sender, const char *text) {
   sender->send("'");
   if (text != nullptr) {
@@ -144,7 +167,7 @@ void sendJsString(Supla::WebSender *sender, const char *text) {
 
 void sendWifiScanHint(Supla::WebSender *sender, const char *ssid) {
   auto hint = sender->tag("div");
-  hint.attr("class", "hint");
+  hint.attr("class", wifiScanHintClass(ssid));
   hint.attr("id", WifiSsidHintId);
   hint.body([&]() {
     if (ssid != nullptr && ssid[0] != '\0') {
@@ -184,7 +207,8 @@ void sendWifiSsidDatalist(Supla::WebSender *sender) {
 
 void sendWifiScanScript(Supla::WebSender *sender) {
   sender->send("<script>"
-               "var wifiScanHints=Object.create(null);");
+               "var wifiScanHints=Object.create(null);"
+               "var wifiScanHintClasses=Object.create(null);");
 
   bool freshScan = hasFreshWifiScanResults();
   auto cache = WifiScanResultCache::Instance();
@@ -207,6 +231,11 @@ void sendWifiScanScript(Supla::WebSender *sender) {
       sender->send("]=");
       sendJsString(sender, message);
       sender->send(";");
+      sender->send("wifiScanHintClasses[");
+      sendJsString(sender, result.ssid);
+      sender->send("]=");
+      sendJsString(sender, wifiScanHintClass(result.ssid));
+      sender->send(";");
     }
   }
 
@@ -216,12 +245,19 @@ void sendWifiScanScript(Supla::WebSender *sender) {
                "var e=document.getElementById('sid');"
                "var h=document.getElementById('wifi_scan_hint');"
                "if(e==null||h==null){return;}"
-               "if(e.value==''){h.textContent='';return;}"
+               "if(e.value==''){h.textContent='';h.className='hint';return;}"
                "if(wifiScanFresh){"
-               "h.textContent=wifiScanHints[e.value]||"
+               "if(wifiScanHints[e.value]){"
+               "h.textContent=wifiScanHints[e.value];"
+               "h.className=wifiScanHintClasses[e.value]||'hint';"
+               "}else{"
+               "h.textContent="
                "'Warning: this network was not found in the latest Wi-Fi scan';"
+               "h.className='hint warn';"
+               "}"
                "}else{"
                "h.textContent='Wi-Fi scan result is not available yet';"
+               "h.className='hint';"
                "}}"
                "</script>");
 }
