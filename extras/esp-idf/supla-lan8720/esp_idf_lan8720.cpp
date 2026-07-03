@@ -86,6 +86,10 @@ bool Supla::EspIdfLan8720::isStaticIpConfigured() const {
   return staticIpConfigured;
 }
 
+void Supla::EspIdfLan8720::setEthStarted(bool started) {
+  ethStarted = started;
+}
+
 static void eventHandler(void *arg,
                          esp_event_base_t eventBase,
                          int32_t eventId,
@@ -115,10 +119,12 @@ static void eventHandler(void *arg,
   if (eventBase == ETH_EVENT) {
     switch (eventId) {
       case ETHERNET_EVENT_START: {
+        thisNetIntfPtr->setEthStarted(true);
         SUPLA_LOG_INFO("[%s] Ethernet started", thisNetIntfPtr->getIntfName());
         break;
       }
       case ETHERNET_EVENT_STOP: {
+        thisNetIntfPtr->setEthStarted(false);
         SUPLA_LOG_INFO("[%s] Ethernet stopped", thisNetIntfPtr->getIntfName());
         break;
       }
@@ -155,9 +161,9 @@ static void eventHandler(void *arg,
 }
 
 void Supla::EspIdfLan8720::setup() {
-  setIpReady(false);
-  staticIpConfigured = false;
   if (!initDone) {
+    setIpReady(false);
+    staticIpConfigured = false;
     Supla::initEspNetif();
 
     esp_netif_inherent_config_t espNetifConfig =
@@ -236,10 +242,18 @@ void Supla::EspIdfLan8720::setup() {
         SUPLA_LOG_INFO("[%s] static IP configured", getIntfName());
       }
     }
-
-    esp_eth_start(ethHandle);
   }
 
+  if (!ethStarted && ethHandle != NULL) {
+    esp_err_t result = esp_eth_start(ethHandle);
+    if (result == ESP_OK || result == ESP_ERR_INVALID_STATE) {
+      ethStarted = true;
+    } else {
+      SUPLA_LOG_WARNING("[%s] Ethernet start failed (%d)",
+                        getIntfName(),
+                        result);
+    }
+  }
 
   allowDisable = true;
   initDone = true;
@@ -251,14 +265,24 @@ void Supla::EspIdfLan8720::disable() {
   }
 
   allowDisable = false;
-  staticIpConfigured = false;
   SUPLA_LOG_DEBUG("[%s] disabling ETH connection", getIntfName());
   DisconnectProtocols();
-  ESP_ERROR_CHECK(esp_eth_stop(ethHandle));
+  if (ethStarted && ethHandle != NULL) {
+    esp_err_t result = esp_eth_stop(ethHandle);
+    if (result == ESP_OK || result == ESP_ERR_INVALID_STATE) {
+      ethStarted = false;
+      setIpv4Addr(0);
+    } else {
+      SUPLA_LOG_WARNING("[%s] Ethernet stop failed (%d)",
+                        getIntfName(),
+                        result);
+    }
+  }
 }
 
 void Supla::EspIdfLan8720::uninit() {
   setIpReady(false);
+  ethStarted = false;
   staticIpConfigured = false;
   DisconnectProtocols();
   if (initDone) {

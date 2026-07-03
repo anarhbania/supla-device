@@ -469,7 +469,7 @@ TEST_F(HtmlTagBuilderTests, WifiParametersEscapesSsidForDatalistScript) {
 }
 
 TEST_F(HtmlTagBuilderTests,
-       WifiParametersLogsScanResultToLastStateOnSaveAndRestart) {
+       WifiParametersLogsScanResultToLastStateOnWifiSave) {
   ConfigMock cfg;
   DummyWebServer server;
   SuplaDeviceClass sdc;
@@ -483,6 +483,7 @@ TEST_F(HtmlTagBuilderTests,
   cache->finishUpdate(millis());
 
   EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, setWiFiSSID(StrEq("ssid_test"))).WillOnce(Return(true));
   EXPECT_CALL(cfg, getWiFiSSID(_)).WillOnce([](char* ssid) {
     std::memcpy(ssid, "ssid_test", sizeof("ssid_test"));
     return true;
@@ -490,7 +491,7 @@ TEST_F(HtmlTagBuilderTests,
 
   {
     Supla::Html::WifiParameters params;
-    EXPECT_FALSE(params.handleResponse("rbt", "2"));
+    EXPECT_TRUE(params.handleResponse("sid", "ssid_test"));
     params.onProcessingEnd();
   }
 
@@ -503,7 +504,8 @@ TEST_F(HtmlTagBuilderTests,
   EXPECT_EQ(nullptr, logger->getLog());
 }
 
-TEST_F(HtmlTagBuilderTests, WifiParametersDoesNotLogScanResultOnPlainSave) {
+TEST_F(HtmlTagBuilderTests,
+       WifiParametersDoesNotLogScanResultOnRestartWithoutWifiSave) {
   ConfigMock cfg;
   DummyWebServer server;
   SuplaDeviceClass sdc;
@@ -512,10 +514,13 @@ TEST_F(HtmlTagBuilderTests, WifiParametersDoesNotLogScanResultOnPlainSave) {
   server.setSuplaDeviceClass(&sdc);
 
   EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, loadNetifConfig(StrEq(Supla::ConfigTag::WifiNetifCfgTag), _))
+      .WillOnce(Return(false));
   EXPECT_CALL(cfg, getWiFiSSID(_)).Times(0);
 
   {
     Supla::Html::WifiParameters params;
+    EXPECT_FALSE(params.handleResponse("rbt", "2"));
     params.onProcessingEnd();
   }
 

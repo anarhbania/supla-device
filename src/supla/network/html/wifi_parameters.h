@@ -40,7 +40,7 @@ class WifiParameters : public HtmlElement {
   void logWifiScanResult();
 
   bool checkboxFound = false;
-  bool restartRequested = false;
+  bool wifiSettingsSeen = false;
   NetworkAddressParameters netifParameters;
 };
 

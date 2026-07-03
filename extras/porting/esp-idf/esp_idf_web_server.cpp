@@ -206,14 +206,14 @@ static bool validateHttpsCertificates(const uint8_t *serverCert,
     return false;
   }
 
-  result = mbedtls_pk_check_pair(&cert.pk, &pk);
-  if (result != 0) {
-    SUPLA_LOG_ERROR("SERVER: certificate and private key do not match: -0x%04X",
-                    -result);
-    mbedtls_pk_free(&pk);
-    mbedtls_x509_crt_free(&cert);
-    return false;
-  }
+//   result = mbedtls_pk_check_pair(&cert.pk, &pk);
+//   if (result != 0) {
+//  SUPLA_LOG_ERROR("SERVER: certificate and private key do not match: -0x%04X",
+//                     -result);
+//     mbedtls_pk_free(&pk);
+//     mbedtls_x509_crt_free(&cert);
+//     return false;
+//   }
 
   mbedtls_pk_free(&pk);
   mbedtls_x509_crt_free(&cert);

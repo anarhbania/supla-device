@@ -353,10 +353,8 @@ void Supla::WebServer::parsePost(const char *postContent,
         if (strcmp(key, "rbt") == 0) {
           int reboot = stringToUInt(value);
           SUPLA_LOG_DEBUG("rbt found %d", reboot);
-          if (reboot == 2) {
-            sdc->scheduleSoftRestart(2500);
-          } else if (reboot) {
-            sdc->scheduleSoftRestart(1000);
+          if (reboot > pendingReboot) {
+            pendingReboot = reboot > 2 ? 2 : reboot;
           }
         }
         partialSize = 0;
@@ -372,6 +370,14 @@ void Supla::WebServer::parsePost(const char *postContent,
     if (csrfRejected || !csrfValidated) {
       cleanupParser();
       return;
+    }
+
+    if (sdc != nullptr) {
+      if (pendingReboot == 2) {
+        sdc->scheduleSoftRestart(2500);
+      } else if (pendingReboot == 1) {
+        sdc->scheduleSoftRestart(1000);
+      }
     }
 
     for (auto htmlElement = Supla::HtmlElement::begin(); htmlElement;
@@ -400,6 +406,7 @@ void Supla::WebServer::resetParser() {
   csrfFirstFieldRequired = true;
   csrfValidated = false;
   csrfRejected = false;
+  pendingReboot = 0;
 }
 
 void Supla::WebServer::cleanupParser() {
@@ -408,6 +415,7 @@ void Supla::WebServer::cleanupParser() {
   memset(key, 0, HTML_KEY_LENGTH);
   delete[] value;
   value = nullptr;
+  pendingReboot = 0;
 }
 
 bool Supla::WebServer::isSectionAllowed(Supla::HtmlSection section) const {

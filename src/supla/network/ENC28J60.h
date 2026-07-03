@@ -38,10 +38,11 @@ class ENC28J60 : public Supla::Network {
   }
 
   void disable() override {
+    isDeviceReady = false;
   }
 
   bool isReady() override {
-    return true;
+    return isDeviceReady;
   }
 
   void setup() override {
@@ -49,8 +50,9 @@ class ENC28J60 : public Supla::Network {
     Serial.println(F("Connecting to network..."));
     if (useLocalIp) {
       Ethernet.begin(mac, localIp);
+      isDeviceReady = true;
     } else {
-      Ethernet.begin(mac);
+      isDeviceReady = Ethernet.begin(mac) == 1;
     }
 
     Serial.print(F("localIP: "));
@@ -65,6 +67,7 @@ class ENC28J60 : public Supla::Network {
 
  protected:
   uint8_t mac[6] = {};
+  bool isDeviceReady = false;
 };
 
 };  // namespace Supla

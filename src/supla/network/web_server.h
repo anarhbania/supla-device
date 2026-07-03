@@ -98,6 +98,7 @@ class WebServer {
   bool csrfFirstFieldRequired = true;
   bool csrfValidated = false;
   bool csrfRejected = false;
+  uint8_t pendingReboot = 0;
   uint8_t csrfSecret[16] = {};
   char csrfToken[33] = {};
 };

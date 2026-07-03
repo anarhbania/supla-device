@@ -149,6 +149,7 @@ class ESPWifi : public Supla::Wifi {
     }
 
     yield();
+    allowDisable = true;
   }
 
   bool iterate() override {
@@ -209,6 +210,21 @@ class ESPWifi : public Supla::Wifi {
   }
 
   void disable() override {
+    if (!allowDisable) {
+      return;
+    }
+
+    allowDisable = false;
+    configModeScanInProgress = false;
+    SUPLA_LOG_DEBUG("[%s] disabling WiFi connection", getIntfName());
+    DisconnectProtocols();
+    WiFi.scanDelete();
+    Supla::InputNoiseGuard::NotifyWifiTransition();
+    WiFi.softAPdisconnect(true);
+    Supla::InputNoiseGuard::NotifyWifiTransition();
+    WiFi.disconnect(true);
+    Supla::InputNoiseGuard::NotifyWifiTransition();
+    WiFi.mode(WIFI_OFF);
   }
 
   // DEPRECATED, use setSSLEnabled instead
@@ -246,10 +262,7 @@ class ESPWifi : public Supla::Wifi {
   }
 
   void uninit() override {
-    Supla::InputNoiseGuard::NotifyWifiTransition();
-    WiFi.softAPdisconnect(true);
-    Supla::InputNoiseGuard::NotifyWifiTransition();
-    WiFi.disconnect(true);
+    disable();
   }
 
   uint32_t getIP() override {
@@ -263,6 +276,7 @@ class ESPWifi : public Supla::Wifi {
  protected:
   bool wifiConfigured = false;
   bool configModeScanInProgress = false;
+  bool allowDisable = false;
 
 #ifdef ARDUINO_ARCH_ESP8266
   WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;

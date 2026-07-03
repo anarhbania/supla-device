@@ -379,6 +379,9 @@ void Supla::EspIdfWifi::disable() {
   allowDisable = false;
   configModeScanInProgress = false;
   staticIpConfigured = false;
+  setWifiConnected(false);
+  setIpReady(false);
+  setIpv4Addr(0);
   SUPLA_LOG_DEBUG("[%s] disabling WiFi connection", getIntfName());
   DisconnectProtocols();
   uint8_t channel = 0;

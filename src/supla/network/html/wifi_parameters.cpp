@@ -302,37 +302,40 @@ bool WifiParameters::handleResponse(const char* key, const char* value) {
     return netifParameters.handleResponse(key, value);
   }
   if (strcmp(key, "sid") == 0) {
+    wifiSettingsSeen = true;
     cfg->setWiFiSSID(value);
     return true;
   } else if (strcmp(key, "wpw") == 0) {
+    wifiSettingsSeen = true;
     if (strlen(value) > 0) {
       cfg->setWiFiPassword(value);
     }
     return true;
   } else if (strcmp(key, "wifi_en") == 0) {
+    wifiSettingsSeen = true;
     checkboxFound = true;
     uint8_t wifiDisVale = (strncmp(value, "on", 3) == 0 ? 0 : 1);
     cfg->setUInt8(Supla::WifiDisableTag, wifiDisVale);
     return true;
-  } else if (strcmp(key, "rbt") == 0) {
-    restartRequested = value != nullptr && strcmp(value, "0") != 0;
-    return false;
   }
 
-  return netifParameters.handleResponse(key, value);
+  bool handled = netifParameters.handleResponse(key, value);
+  if (handled) {
+    wifiSettingsSeen = true;
+  }
+  return handled;
 }
 
 void WifiParameters::onProcessingEnd() {
-  if (restartRequested) {
-    logWifiScanResult();
-  }
-  restartRequested = false;
-
   if (!checkboxFound && Supla::Network::GetNetIntfCount() > 1) {
     // checkbox doesn't send value when it is not checked, so on processing end
     // we check if it was found earlier, and if not, then we process it as "off"
     handleResponse("wifi_en", "off");
   }
+  if (wifiSettingsSeen) {
+    logWifiScanResult();
+  }
+  wifiSettingsSeen = false;
   checkboxFound = false;
   netifParameters.onProcessingEnd();
 }

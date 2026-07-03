@@ -85,6 +85,8 @@ void Network::Setup() {
   while (ptr) {
     if (!ptr->isIntfDisabledInConfig()) {
       ptr->setup();
+    } else {
+      ptr->disable();
     }
     ptr = ptr->nextNetIntf;
   }
@@ -93,9 +95,7 @@ void Network::Setup() {
 void Network::Disable() {
   auto ptr = firstNetIntf;
   while (ptr) {
-    if (!ptr->isIntfDisabledInConfig()) {
-      ptr->disable();
-    }
+    ptr->disable();
     ptr = ptr->nextNetIntf;
   }
 }
@@ -184,10 +184,8 @@ bool Network::PopSetupNeeded() {
   bool setupNeeded = false;
   auto ptr = firstNetIntf;
   while (ptr) {
-    if (!ptr->isIntfDisabledInConfig()) {
-      if (ptr->popSetupNeeded()) {
-        setupNeeded = true;
-      }
+    if (ptr->popSetupNeeded()) {
+      setupNeeded = true;
     }
     ptr = ptr->nextNetIntf;
   }
@@ -468,9 +466,6 @@ bool Network::popSetupNeeded() {
 }
 
 void Network::setSetupNeeded() {
-  if (isIntfDisabledInConfig()) {
-    return;
-  }
   setupNeeded = true;
 }
 

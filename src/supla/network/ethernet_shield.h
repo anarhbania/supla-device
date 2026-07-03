@@ -39,6 +39,7 @@ class EthernetShield : public Supla::Network {
   }
 
   void disable() override {
+    isDeviceReady = false;
   }
 
   bool isReady() override {

@@ -40,6 +40,7 @@ void Supla::LinuxNetwork::setup() {
 }
 
 void Supla::LinuxNetwork::disable() {
+  isDeviceReady = false;
 }
 
 bool Supla::LinuxNetwork::iterate() {
