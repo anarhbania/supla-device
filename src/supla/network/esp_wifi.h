@@ -191,6 +191,7 @@ class ESPWifi : public Supla::Wifi {
     int scanResult = WiFi.scanNetworks(true, true);
     configModeScanInProgress = (scanResult == WIFI_SCAN_RUNNING);
     if (!configModeScanInProgress && scanResult >= 0) {
+      auto cache = Supla::WifiScanResultCache::Instance();
       cache->beginUpdate();
       for (int i = 0; i < scanResult; i++) {
         cache->addOrUpdate(WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i));
