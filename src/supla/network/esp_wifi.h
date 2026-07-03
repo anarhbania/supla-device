@@ -154,7 +154,7 @@ class ESPWifi : public Supla::Wifi {
 
   bool iterate() override {
     if (!configModeScanInProgress) {
-      return false;
+      return Supla::Wifi::iterate();
     }
 
     int scanResult = WiFi.scanComplete();
@@ -179,16 +179,14 @@ class ESPWifi : public Supla::Wifi {
     }
 
     WiFi.scanDelete();
-    return false;
+    return Supla::Wifi::iterate();
   }
 
   void startConfigModeScan() override {
-    if (mode != Supla::DEVICE_MODE_CONFIG) {
+    if (mode != Supla::DEVICE_MODE_CONFIG || configModeScanInProgress) {
       return;
     }
 
-    auto cache = Supla::WifiScanResultCache::Instance();
-    cache->clear();
     WiFi.scanDelete();
     int scanResult = WiFi.scanNetworks(true, true);
     configModeScanInProgress = (scanResult == WIFI_SCAN_RUNNING);
@@ -281,6 +279,10 @@ class ESPWifi : public Supla::Wifi {
 #ifdef ARDUINO_ARCH_ESP8266
   WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
 #endif
+
+  bool isConfigModeScanInProgress() const override {
+    return configModeScanInProgress;
+  }
 };
 
 };  // namespace Supla

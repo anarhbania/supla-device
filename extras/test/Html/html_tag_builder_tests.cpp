@@ -26,6 +26,7 @@
 #include <supla/network/html/custom_text_parameter.h>
 #include <supla/network/html/select_input_parameter.h>
 #include <supla/network/html/wifi_parameters.h>
+#include <supla/network/netif_wifi.h>
 #include <supla/network/web_sender.h>
 #include <supla/network/web_server.h>
 #include <supla/network/wifi_scan_result.h>
@@ -81,6 +82,40 @@ class CountingHtmlElement : public Supla::HtmlElement {
   std::string lastKey;
   std::string lastValue;
   int handledCount = 0;
+};
+
+class PeriodicScanWifi : public Supla::Wifi {
+ public:
+  void setup() override {
+  }
+
+  void disable() override {
+  }
+
+  bool isReady() override {
+    return false;
+  }
+
+  void startConfigModeScan() override {
+    scanStartCount++;
+    scanInProgress = true;
+  }
+
+  void finishScan(uint32_t timestampMs) {
+    auto cache = Supla::WifiScanResultCache::Instance();
+    cache->beginUpdate();
+    cache->addOrUpdate("ssid_test", -70, 1);
+    cache->finishUpdate(timestampMs);
+    scanInProgress = false;
+  }
+
+  int scanStartCount = 0;
+  bool scanInProgress = false;
+
+ protected:
+  bool isConfigModeScanInProgress() const override {
+    return scanInProgress;
+  }
 };
 
 class HtmlTagBuilderTests : public ::testing::Test {
@@ -526,4 +561,122 @@ TEST_F(HtmlTagBuilderTests,
 
   ASSERT_TRUE(logger->prepareLastStateLog());
   EXPECT_EQ(nullptr, logger->getLog());
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersDeduplicatesSameScanLastState) {
+  ConfigMock cfg;
+  DummyWebServer server;
+  SuplaDeviceClass sdc;
+  auto logger = new Supla::Device::LastStateLogger;
+  sdc.setLastStateLogger(logger);
+  server.setSuplaDeviceClass(&sdc);
+
+  auto cache = Supla::WifiScanResultCache::Instance();
+  cache->beginUpdate();
+  cache->addOrUpdate("ssid_dedup", -74, 6);
+  cache->finishUpdate(millis());
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, setWiFiSSID(StrEq("ssid_dedup")))
+      .Times(2)
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillRepeatedly([](char* ssid) {
+    std::memcpy(ssid, "ssid_dedup", sizeof("ssid_dedup"));
+    return true;
+  });
+
+  {
+    Supla::Html::WifiParameters params;
+    EXPECT_TRUE(params.handleResponse("sid", "ssid_dedup"));
+    params.onProcessingEnd();
+    EXPECT_TRUE(params.handleResponse("sid", "ssid_dedup"));
+    params.onProcessingEnd();
+  }
+
+  ASSERT_TRUE(logger->prepareLastStateLog());
+  char *log = logger->getLog();
+  ASSERT_NE(nullptr, log);
+  EXPECT_THAT(log, HasSubstr("Wi-Fi: \"ssid_dedup\" found"));
+  EXPECT_EQ(nullptr, logger->getLog());
+}
+
+TEST_F(HtmlTagBuilderTests, WifiParametersLogsScanLastStateWhenMessageChanges) {
+  ConfigMock cfg;
+  DummyWebServer server;
+  SuplaDeviceClass sdc;
+  auto logger = new Supla::Device::LastStateLogger;
+  sdc.setLastStateLogger(logger);
+  server.setSuplaDeviceClass(&sdc);
+
+  EXPECT_CALL(cfg, init()).WillRepeatedly(Return(false));
+  EXPECT_CALL(cfg, setWiFiSSID(StrEq("ssid_changed")))
+      .Times(2)
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(cfg, getWiFiSSID(_)).WillRepeatedly([](char* ssid) {
+    std::memcpy(ssid, "ssid_changed", sizeof("ssid_changed"));
+    return true;
+  });
+
+  {
+    Supla::Html::WifiParameters params;
+    auto cache = Supla::WifiScanResultCache::Instance();
+    cache->beginUpdate();
+    cache->addOrUpdate("ssid_changed", -74, 6);
+    cache->finishUpdate(millis());
+    EXPECT_TRUE(params.handleResponse("sid", "ssid_changed"));
+    params.onProcessingEnd();
+
+    cache->beginUpdate();
+    cache->addOrUpdate("ssid_changed", -50, 6);
+    cache->finishUpdate(millis());
+    EXPECT_TRUE(params.handleResponse("sid", "ssid_changed"));
+    params.onProcessingEnd();
+  }
+
+  ASSERT_TRUE(logger->prepareLastStateLog());
+  char *log = logger->getLog();
+  ASSERT_NE(nullptr, log);
+  EXPECT_THAT(log, HasSubstr("RSSI -50 dBm"));
+  log = logger->getLog();
+  ASSERT_NE(nullptr, log);
+  EXPECT_THAT(log, HasSubstr("RSSI -74 dBm"));
+  EXPECT_EQ(nullptr, logger->getLog());
+}
+
+TEST_F(HtmlTagBuilderTests, PeriodicWifiScanStartsWhenCacheIsMissing) {
+  Supla::WifiScanResultCache::Instance()->clear();
+  {
+    PeriodicScanWifi wifi;
+    Supla::Network::SetConfigMode();
+
+    EXPECT_FALSE(Supla::Network::Iterate());
+    EXPECT_EQ(1, wifi.scanStartCount);
+
+    EXPECT_FALSE(Supla::Network::Iterate());
+    EXPECT_EQ(1, wifi.scanStartCount);
+
+    Supla::Network::SetNormalMode();
+  }
+}
+
+TEST_F(HtmlTagBuilderTests, PeriodicWifiScanRefreshesAfterInterval) {
+  Supla::WifiScanResultCache::Instance()->clear();
+  {
+    PeriodicScanWifi wifi;
+    Supla::Network::SetConfigMode();
+    wifi.finishScan(millis());
+
+    EXPECT_FALSE(Supla::Network::Iterate());
+    EXPECT_EQ(0, wifi.scanStartCount);
+
+    time.advance(Supla::WifiScanRefreshIntervalMs - 1);
+    EXPECT_FALSE(Supla::Network::Iterate());
+    EXPECT_EQ(0, wifi.scanStartCount);
+
+    time.advance(1);
+    EXPECT_FALSE(Supla::Network::Iterate());
+    EXPECT_EQ(1, wifi.scanStartCount);
+
+    Supla::Network::SetNormalMode();
+  }
 }

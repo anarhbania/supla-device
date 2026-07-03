@@ -468,12 +468,9 @@ bool Supla::EspIdfWifi::isInConfigMode() {
 }
 
 void Supla::EspIdfWifi::startConfigModeScan() {
-  if (mode != Supla::DEVICE_MODE_CONFIG) {
+  if (mode != Supla::DEVICE_MODE_CONFIG || configModeScanInProgress) {
     return;
   }
-
-  auto cache = Supla::WifiScanResultCache::Instance();
-  cache->clear();
 
   wifi_scan_config_t scanConfig = {};
   scanConfig.show_hidden = true;
@@ -522,6 +519,10 @@ void Supla::EspIdfWifi::finishConfigModeScan() {
   SUPLA_LOG_INFO("[%s] config mode scan completed (%u networks)",
                  getIntfName(),
                  static_cast<unsigned int>(apCount));
+}
+
+bool Supla::EspIdfWifi::isConfigModeScanInProgress() const {
+  return configModeScanInProgress;
 }
 
 bool Supla::EspIdfWifi::getMacAddr(uint8_t *out) {

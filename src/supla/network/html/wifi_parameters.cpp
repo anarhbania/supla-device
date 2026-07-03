@@ -354,6 +354,14 @@ void WifiParameters::logWifiScanResult() {
 
   char message[128] = {};
   formatWifiScanMessage(message, sizeof(message), ssid, true);
+  if (message[0] == '\0' ||
+      strncmp(message, lastLoggedWifiScanMessage, sizeof(message)) == 0) {
+    return;
+  }
+
+  strncpy(lastLoggedWifiScanMessage, message,
+          sizeof(lastLoggedWifiScanMessage) - 1);
+  lastLoggedWifiScanMessage[sizeof(lastLoggedWifiScanMessage) - 1] = '\0';
   server->addLastStateLog(message);
 }
 

@@ -76,6 +76,7 @@ class EspIdfWifi : public Supla::Wifi {
   uint32_t connectedToWifiTimestamp = 0;
   int maxTxPower = -1;
   bool configModeScanInProgress = false;
+  bool isConfigModeScanInProgress() const override;
 #ifdef SUPLA_DEVICE_ESP32
   esp_netif_t *staNetIf = nullptr;
   esp_netif_t *apNetIf = nullptr;

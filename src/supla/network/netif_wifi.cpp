@@ -20,6 +20,8 @@
 #include <supla/storage/config_tags.h>
 #include <supla/storage/config.h>
 #include <supla/storage/storage.h>
+#include <supla/network/wifi_scan_result.h>
+#include <supla/time.h>
 
 using Supla::Wifi;
 
@@ -49,6 +51,41 @@ bool Wifi::isWifiConfigRequired() {
 }
 
 void Wifi::startConfigModeScan() {
+}
+
+bool Wifi::isConfigModeScanInProgress() const {
+  return false;
+}
+
+void Wifi::requestConfigModeScanIfDue() {
+  if (mode != Supla::DEVICE_MODE_CONFIG || isConfigModeScanInProgress()) {
+    return;
+  }
+
+  uint32_t now = millis();
+  auto cache = Supla::WifiScanResultCache::Instance();
+  bool scanDue = true;
+  if (cache != nullptr && cache->hasScan()) {
+    scanDue = now - cache->getTimestampMs() >= WifiScanRefreshIntervalMs;
+  }
+
+  if (!scanDue) {
+    return;
+  }
+
+  if (configModeScanStartRecorded &&
+      now - lastConfigModeScanStartMs < WifiScanRefreshIntervalMs) {
+    return;
+  }
+
+  configModeScanStartRecorded = true;
+  lastConfigModeScanStartMs = now;
+  startConfigModeScan();
+}
+
+bool Wifi::iterate() {
+  requestConfigModeScanIfDue();
+  return Supla::Network::iterate();
 }
 
 void Wifi::onLoadConfig() {
