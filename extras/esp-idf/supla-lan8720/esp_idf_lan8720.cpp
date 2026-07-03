@@ -282,7 +282,6 @@ void Supla::EspIdfLan8720::disable() {
 
 void Supla::EspIdfLan8720::uninit() {
   setIpReady(false);
-  ethStarted = false;
   staticIpConfigured = false;
   DisconnectProtocols();
   if (initDone) {
@@ -291,15 +290,45 @@ void Supla::EspIdfLan8720::uninit() {
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_ETH_LOST_IP, eventHandler);
     esp_event_handler_unregister(ETH_EVENT, ESP_EVENT_ANY_ID, eventHandler);
 
-    esp_netif_destroy(netIf);
-    esp_netif_deinit();
+    if (ethHandle != NULL) {
+      esp_err_t result = esp_eth_stop(ethHandle);
+      if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) {
+        SUPLA_LOG_WARNING("[%s] Ethernet stop failed during uninit (%d)",
+                          getIntfName(),
+                          result);
+      }
+      ethStarted = false;
+    }
+
+    if (ethGlue != NULL) {
+      esp_err_t result = esp_eth_del_netif_glue(ethGlue);
+      if (result != ESP_OK) {
+        SUPLA_LOG_WARNING("[%s] Ethernet glue delete failed (%d)",
+                          getIntfName(),
+                          result);
+      }
+      ethGlue = NULL;
+    }
 
     if (ethHandle != NULL) {
-      esp_eth_stop(ethHandle);
-      esp_eth_del_netif_glue(ethGlue);
-      esp_eth_driver_uninstall(ethHandle);
+      esp_err_t result = esp_eth_driver_uninstall(ethHandle);
+      if (result != ESP_OK) {
+        SUPLA_LOG_WARNING("[%s] Ethernet driver uninstall failed (%d)",
+                          getIntfName(),
+                          result);
+      }
+      ethHandle = NULL;
+    }
+
+    if (netIf != nullptr) {
+      esp_netif_destroy(netIf);
+      netIf = nullptr;
     }
   }
+  ethStarted = false;
+  allowDisable = false;
+  initDone = false;
+  setIpv4Addr(0);
 }
 
 bool Supla::EspIdfLan8720::getMacAddr(uint8_t *out) {

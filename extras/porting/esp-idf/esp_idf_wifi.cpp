@@ -394,23 +394,57 @@ void Supla::EspIdfWifi::disable() {
     lastChannel = channel;
   }
   Supla::InputNoiseGuard::NotifyWifiTransition();
-  esp_wifi_disconnect();
+  esp_err_t result = esp_wifi_disconnect();
+  if (result != ESP_OK && result != ESP_ERR_WIFI_NOT_INIT &&
+      result != ESP_ERR_WIFI_NOT_STARTED &&
+      result != ESP_ERR_WIFI_NOT_CONNECT) {
+    SUPLA_LOG_WARNING("[%s] WiFi disconnect failed (%d)",
+                      getIntfName(),
+                      result);
+  }
   Supla::InputNoiseGuard::NotifyWifiTransition();
-  ESP_ERROR_CHECK(esp_wifi_stop());
+  result = esp_wifi_stop();
+  if (result != ESP_OK && result != ESP_ERR_WIFI_NOT_INIT &&
+      result != ESP_ERR_WIFI_NOT_STARTED) {
+    SUPLA_LOG_WARNING("[%s] WiFi stop failed (%d)", getIntfName(), result);
+  }
 }
 
 void Supla::EspIdfWifi::uninit() {
   setWifiConnected(false);
   setIpReady(false);
+  configModeScanInProgress = false;
   staticIpConfigured = false;
   DisconnectProtocols();
   if (initDone) {
     SUPLA_LOG_DEBUG("[%s] stopping WiFi connection", getIntfName());
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, eventHandler);
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_LOST_IP, eventHandler);
+    esp_event_handler_unregister(IP_EVENT,
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+                                 IP_EVENT_ASSIGNED_IP_TO_CLIENT,
+#else
+                                 IP_EVENT_AP_STAIPASSIGNED,
+#endif
+                                 eventHandler);
     esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, eventHandler);
     Supla::InputNoiseGuard::NotifyWifiTransition();
-    esp_wifi_stop();
+    esp_err_t result = esp_wifi_disconnect();
+    if (result != ESP_OK && result != ESP_ERR_WIFI_NOT_INIT &&
+        result != ESP_ERR_WIFI_NOT_STARTED &&
+        result != ESP_ERR_WIFI_NOT_CONNECT) {
+      SUPLA_LOG_WARNING("[%s] WiFi disconnect failed during uninit (%d)",
+                        getIntfName(),
+                        result);
+    }
+    Supla::InputNoiseGuard::NotifyWifiTransition();
+    result = esp_wifi_stop();
+    if (result != ESP_OK && result != ESP_ERR_WIFI_NOT_INIT &&
+        result != ESP_ERR_WIFI_NOT_STARTED) {
+      SUPLA_LOG_WARNING("[%s] WiFi stop failed during uninit (%d)",
+                        getIntfName(),
+                        result);
+    }
 #ifdef SUPLA_DEVICE_ESP32
     if (apNetIf) {
       esp_netif_destroy_default_wifi(apNetIf);
@@ -422,15 +456,16 @@ void Supla::EspIdfWifi::uninit() {
     }
 #endif
 
-    esp_netif_deinit();
-
-    esp_wifi_deauth_sta(0);
-    esp_wifi_disconnect();
-
-    esp_wifi_deinit();
-
-    esp_event_loop_delete_default();
+    result = esp_wifi_deinit();
+    if (result != ESP_OK && result != ESP_ERR_WIFI_NOT_INIT) {
+      SUPLA_LOG_WARNING("[%s] WiFi deinit failed (%d)",
+                        getIntfName(),
+                        result);
+    }
   }
+  allowDisable = false;
+  initDone = false;
+  setIpv4Addr(0);
 }
 
 void Supla::EspIdfWifi::fillStateData(TDSC_ChannelState *channelState) {
