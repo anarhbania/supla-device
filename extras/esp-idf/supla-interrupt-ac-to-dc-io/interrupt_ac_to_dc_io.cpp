@@ -183,7 +183,8 @@ void InterruptAcToDcIo::onFastTimer() {
         Supla::InputNoiseGuard::IsActive()) {
       gpioRawActivitySeen[i] = 0;
       gpioLastRawTimestampMs[i] = 0;
-      gpioAcCandidatePackets[i] = 0;
+      gpioAcCandidateEdges[i] = 0;
+      gpioAcCandidateActiveSamples[i] = 0;
       gpioAcCandidateFirstTimestampMs[i] = 0;
       if (gpioState[i] == 1 || gpioState[i] == 2) {
         gpioLastTimestampMs[i] = now;
@@ -192,15 +193,7 @@ void InterruptAcToDcIo::onFastTimer() {
     }
 
     if (interruptCount > 0) {
-      SUPLA_LOG_DEBUG("GPIO %d INTR COUNT %d", i, interruptCount);
-      // A valid activity packet starts after a quiet period. Fast edges inside
-      // one packet are ignored, but they extend the quiet-period measurement.
-      bool acceptActivity = false;
-      if (gpioRawActivitySeen[i] == 0 ||
-           now - gpioLastRawTimestampMs[i] >
-               gpioMinQuietBeforeNextActivityMs[i]) {
-        acceptActivity = true;
-      }
+//      SUPLA_LOG_DEBUG("GPIO %d INTR COUNT %d", i, interruptCount);
       gpioRawActivitySeen[i] = 1;
       gpioLastRawTimestampMs[i] = now;
 
@@ -208,40 +201,48 @@ void InterruptAcToDcIo::onFastTimer() {
         gpioLastTimestampMs[i] = now;
       }
 
-      if (acceptActivity) {
-        if (gpioState[i] == 0) {
-          gpioState[i] = 2;
+      if (gpioState[i] == 0) {
+        gpioState[i] = 2;
+        gpioAcCandidateFirstTimestampMs[i] = now;
+        gpioAcCandidateEdges[i] = interruptCount;
+        gpioAcCandidateActiveSamples[i] = 1;
+        gpioLastTimestampMs[i] = now;
+      } else if (gpioState[i] == 2) {
+        uint32_t candidateSpanMs = now - gpioAcCandidateFirstTimestampMs[i];
+        if (gpioAcCandidateActiveSamples[i] == 0 ||
+            candidateSpanMs > INTERRUPT_AC_TO_DC_IO_AC_ON_WINDOW_MS) {
           gpioAcCandidateFirstTimestampMs[i] = now;
-          gpioAcCandidatePackets[i] = 1;
-        } else if (gpioState[i] == 2) {
-          uint32_t candidateSpanMs =
-              now - gpioAcCandidateFirstTimestampMs[i];
-          if (gpioAcCandidatePackets[i] == 0 ||
-              candidateSpanMs > INTERRUPT_AC_TO_DC_IO_AC_ON_WINDOW_MS) {
-            gpioAcCandidateFirstTimestampMs[i] = now;
-            gpioAcCandidatePackets[i] = 1;
-            candidateSpanMs = 0;
-          } else if (gpioAcCandidatePackets[i] < 255) {
-            gpioAcCandidatePackets[i]++;
-          }
-
-          if (gpioAcCandidatePackets[i] >=
-                  INTERRUPT_AC_TO_DC_IO_AC_ON_MIN_PACKETS &&
-              candidateSpanMs >= INTERRUPT_AC_TO_DC_IO_AC_ON_MIN_SPAN_MS) {
-            SUPLA_LOG_DEBUG(" *** GPIO %d is ON (AC) ***", i);
-            gpioState[i] = 1;
-            gpioAcCandidatePackets[i] = 0;
-            gpioAcCandidateFirstTimestampMs[i] = 0;
+          gpioAcCandidateEdges[i] = interruptCount;
+          gpioAcCandidateActiveSamples[i] = 1;
+          candidateSpanMs = 0;
+        } else {
+          uint32_t candidateEdges = gpioAcCandidateEdges[i] + interruptCount;
+          gpioAcCandidateEdges[i] =
+              candidateEdges > 65535 ? 65535 : candidateEdges;
+          if (gpioAcCandidateActiveSamples[i] < 255) {
+            gpioAcCandidateActiveSamples[i]++;
           }
         }
-        gpioLastTimestampMs[i] = now;
+
+        if (gpioAcCandidateActiveSamples[i] >=
+                INTERRUPT_AC_TO_DC_IO_AC_ON_MIN_ACTIVE_SAMPLES &&
+            gpioAcCandidateEdges[i] >=
+                INTERRUPT_AC_TO_DC_IO_AC_ON_MIN_EDGES &&
+            candidateSpanMs >= INTERRUPT_AC_TO_DC_IO_AC_ON_MIN_SPAN_MS) {
+          SUPLA_LOG_DEBUG(" *** GPIO %d is ON (AC) ***", i);
+          gpioState[i] = 1;
+          gpioAcCandidateEdges[i] = 0;
+          gpioAcCandidateActiveSamples[i] = 0;
+          gpioAcCandidateFirstTimestampMs[i] = 0;
+        }
       }
       continue;
     }
     if (gpioLastTimestampMs[i] != 0 &&
         now - gpioLastTimestampMs[i] > gpioMinOffTimeout[i]) {
       gpioLastTimestampMs[i] = 0;
-      gpioAcCandidatePackets[i] = 0;
+      gpioAcCandidateEdges[i] = 0;
+      gpioAcCandidateActiveSamples[i] = 0;
       gpioAcCandidateFirstTimestampMs[i] = 0;
       if (gpio_get_level(static_cast<gpio_num_t>(i)) == offStateLevel) {
         gpioState[i] = 0;
