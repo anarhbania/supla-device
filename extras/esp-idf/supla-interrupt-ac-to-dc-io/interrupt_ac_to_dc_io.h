@@ -26,8 +26,6 @@ namespace Supla {
 
 #define INTERRUPT_AC_TO_DC_IO_MAX_GPIOS 50
 #define INTERRUPT_AC_TO_DC_IO_DEFAULT_MIN_QUIET_MS 5
-#define INTERRUPT_AC_TO_DC_IO_MAX_BURST_BASE 4
-#define INTERRUPT_AC_TO_DC_IO_MAX_BURST_PER_MS_DIVISOR 2
 #define INTERRUPT_AC_TO_DC_IO_AC_ON_MIN_PACKETS 4
 #define INTERRUPT_AC_TO_DC_IO_AC_ON_MIN_SPAN_MS 25
 #define INTERRUPT_AC_TO_DC_IO_AC_ON_WINDOW_MS 80
@@ -57,8 +55,6 @@ class InterruptAcToDcIo : public Io::Base, public Element {
   void disableInputNoiseGuardForGpio(int gpio);
 
  protected:
-  uint8_t getMaxInterruptBurst(uint32_t elapsedMs) const;
-
 //  bool gpioHiIsOn[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
   int32_t gpioMinOffTimeout[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
   int32_t gpioLastTimestampMs[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
@@ -74,7 +70,6 @@ class InterruptAcToDcIo : public Io::Base, public Element {
   bool initialized = false;
   uint8_t offStateLevel = 0;
   uint32_t initCounter = 100;
-  uint32_t lastFastTimerTimestampMs = 0;
 };
 
 }  // namespace Supla

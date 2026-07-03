@@ -150,13 +150,6 @@ void InterruptAcToDcIo::disableInputNoiseGuardForGpio(int gpio) {
   enableInputNoiseGuardForGpio(gpio, false);
 }
 
-uint8_t InterruptAcToDcIo::getMaxInterruptBurst(uint32_t elapsedMs) const {
-  uint32_t maxBurst = INTERRUPT_AC_TO_DC_IO_MAX_BURST_BASE +
-      (elapsedMs + INTERRUPT_AC_TO_DC_IO_MAX_BURST_PER_MS_DIVISOR - 1) /
-          INTERRUPT_AC_TO_DC_IO_MAX_BURST_PER_MS_DIVISOR;
-  return maxBurst > 255 ? 255 : static_cast<uint8_t>(maxBurst);
-}
-
 int InterruptAcToDcIo::customDigitalRead(int channelNumber, uint8_t pin) {
   if (!isInitialized()) {
     SUPLA_LOG_ERROR("InterruptAcToDcIo: not initialized");
@@ -170,15 +163,6 @@ int InterruptAcToDcIo::customDigitalRead(int channelNumber, uint8_t pin) {
 
 void InterruptAcToDcIo::onFastTimer() {
   uint32_t now = millis();
-  uint32_t elapsedMs = 1;
-  if (lastFastTimerTimestampMs != 0) {
-    elapsedMs = now - lastFastTimerTimestampMs;
-    if (elapsedMs == 0) {
-      elapsedMs = 1;
-    }
-  }
-  lastFastTimerTimestampMs = now;
-  uint8_t maxInterruptBurst = getMaxInterruptBurst(elapsedMs);
 
   if (initCounter > 0) {
     initCounter--;
@@ -208,25 +192,20 @@ void InterruptAcToDcIo::onFastTimer() {
     }
 
     if (interruptCount > 0) {
-//      SUPLA_LOG_DEBUG("GPIO %d INTR COUNT %d", i, interruptCount);
+      SUPLA_LOG_DEBUG("GPIO %d INTR COUNT %d", i, interruptCount);
       // A valid activity packet starts after a quiet period. Fast edges inside
       // one packet are ignored, but they extend the quiet-period measurement.
-      bool tooManyInterrupts = interruptCount > maxInterruptBurst;
       bool acceptActivity = false;
-      if (!tooManyInterrupts &&
-          (gpioRawActivitySeen[i] == 0 ||
+      if (gpioRawActivitySeen[i] == 0 ||
            now - gpioLastRawTimestampMs[i] >
-               gpioMinQuietBeforeNextActivityMs[i])) {
+               gpioMinQuietBeforeNextActivityMs[i]) {
         acceptActivity = true;
       }
       gpioRawActivitySeen[i] = 1;
       gpioLastRawTimestampMs[i] = now;
 
-      if (tooManyInterrupts) {
-        if (gpioState[i] == 1 || gpioState[i] == 2) {
-          gpioLastTimestampMs[i] = now;
-        }
-        continue;
+      if (gpioState[i] == 1 || gpioState[i] == 2) {
+        gpioLastTimestampMs[i] = now;
       }
 
       if (acceptActivity) {
