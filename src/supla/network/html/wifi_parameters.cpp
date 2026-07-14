@@ -193,14 +193,7 @@ void sendWifiSsidDatalist(Supla::WebSender *sender) {
         continue;
       }
 
-      char label[48] = {};
-      snprintf(label,
-               sizeof(label),
-               "RSSI %d dBm, quality %d%%, ch %d",
-               static_cast<int>(result.rssi),
-               Supla::rssiToSignalStrength(result.rssi),
-               static_cast<int>(result.channel));
-      sender->selectOption(result.ssid, label);
+      sender->selectOption(result.ssid, result.ssid);
     }
   });
 }

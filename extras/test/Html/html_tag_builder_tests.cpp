@@ -38,6 +38,7 @@
 
 using ::testing::_;
 using ::testing::HasSubstr;
+using ::testing::Not;
 using ::testing::Return;
 using ::testing::StrEq;
 
@@ -581,9 +582,16 @@ TEST_F(HtmlTagBuilderTests, WifiParametersKeepsSsidInputAndAddsDatalist) {
   EXPECT_THAT(sendHtml,
               HasSubstr("<div class=\"hint\" id=\"wifi_scan_hint\">"));
   EXPECT_THAT(sendHtml, HasSubstr("<datalist id=\"wifi_ssid_list\">"));
-  EXPECT_THAT(sendHtml, HasSubstr("<option value=\"ssid_test\">"));
-  EXPECT_THAT(sendHtml, HasSubstr("<option value=\"ssid_other\">"));
-  EXPECT_THAT(sendHtml, HasSubstr("RSSI -74 dBm, quality 52%, ch 6"));
+  EXPECT_THAT(
+      sendHtml,
+      HasSubstr("<option value=\"ssid_test\">ssid_test</option>"));
+  EXPECT_THAT(
+      sendHtml,
+      HasSubstr("<option value=\"ssid_other\">ssid_other</option>"));
+  EXPECT_THAT(sendHtml,
+              Not(HasSubstr("RSSI -74 dBm, quality 52%, ch 6")));
+  EXPECT_THAT(sendHtml,
+              HasSubstr("Found in Wi-Fi scan: RSSI -74 dBm, quality 52%"));
   EXPECT_THAT(sendHtml, HasSubstr("var wifiScanHints=Object.create(null);"));
   EXPECT_THAT(sendHtml,
               HasSubstr("var wifiScanHintClasses=Object.create(null);"));
@@ -630,7 +638,8 @@ TEST_F(HtmlTagBuilderTests, WifiParametersEscapesSsidForDatalistScript) {
 
   EXPECT_THAT(
       sendHtml,
-      HasSubstr("<option value=\"ssid_&apos;\\&lt;/script&gt;&amp;\">"));
+      HasSubstr("<option value=\"ssid_&apos;\\&lt;/script&gt;&amp;\">"
+                "ssid_&apos;\\&lt;/script&gt;&amp;</option>"));
   EXPECT_THAT(sendHtml, HasSubstr("wifiScanHints['ssid_\\'\\\\"));
   EXPECT_THAT(sendHtml, HasSubstr("\\x3C/script\\x3E\\x26']"));
 }
