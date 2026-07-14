@@ -22,7 +22,6 @@
 #ifdef ARDUINO_ARCH_AVR
 #include <Arduino.h>
 #include <EthernetENC.h>
-
 #include <supla/log_wrapper.h>
 
 #include "../supla_lib_config.h"
@@ -57,10 +56,23 @@ class ENC28J60 : public Supla::Network {
     IPAddress subnetMaskIP = Ethernet.subnetMask();
     IPAddress gatewayIP = Ethernet.gatewayIP();
     IPAddress dnsServerIP = Ethernet.dnsServerIP();
-    SUPLA_LOG_INFO("localIP: %d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
-    SUPLA_LOG_INFO("subnetMaskIP: %d.%d.%d.%d", subnetMaskIP[0], subnetMaskIP[1], subnetMaskIP[2], subnetMaskIP[3]);
-    SUPLA_LOG_INFO("gatewayIP: %d.%d.%d.%d", gatewayIP[0], gatewayIP[1], gatewayIP[2], gatewayIP[3]);
-    SUPLA_LOG_INFO("dnsServerIP: %d.%d.%d.%d", dnsServerIP[0], dnsServerIP[1], dnsServerIP[2], dnsServerIP[3]);
+    SUPLA_LOG_INFO(
+        "localIP: %d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+    SUPLA_LOG_INFO("subnetMaskIP: %d.%d.%d.%d",
+                   subnetMaskIP[0],
+                   subnetMaskIP[1],
+                   subnetMaskIP[2],
+                   subnetMaskIP[3]);
+    SUPLA_LOG_INFO("gatewayIP: %d.%d.%d.%d",
+                   gatewayIP[0],
+                   gatewayIP[1],
+                   gatewayIP[2],
+                   gatewayIP[3]);
+    SUPLA_LOG_INFO("dnsServerIP: %d.%d.%d.%d",
+                   dnsServerIP[0],
+                   dnsServerIP[1],
+                   dnsServerIP[2],
+                   dnsServerIP[3]);
   }
 
  protected:
