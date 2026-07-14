@@ -96,10 +96,12 @@ class ESPWifi : public Supla::Wifi {
 
       WiFiEventId_t event_disconnected = WiFi.onEvent(
           [](WiFiEvent_t event, WiFiEventInfo_t info) {
-          SUPLA_LOG_INFO("WiFi Station disconnected");
+            SUPLA_LOG_INFO("WiFi Station disconnected");
             // ESP32 doesn't reconnect automatically after lost connection
             Supla::InputNoiseGuard::NotifyWifiTransition();
-            WiFi.reconnect();
+            if (mode != Supla::DEVICE_MODE_CONFIG) {
+              WiFi.reconnect();
+            }
           },
           WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
