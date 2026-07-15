@@ -699,12 +699,20 @@ void Relay::onLoadState() {
   uint8_t relayFlags = 0;
   Supla::Storage::ReadState(reinterpret_cast<unsigned char *>(&relayFlags),
                             sizeof(relayFlags));
+  bool restoreOn = relayFlags & RELAY_FLAGS_ON;
+  if (restoreOn &&
+      ((relayFlags & RELAY_FLAGS_IMPULSE_FUNCTION) || isImpulseFunction())) {
+    SUPLA_LOG_INFO(
+        "Relay[%d] ignoring restored ON state for impulse function",
+        channel.getChannelNumber());
+    restoreOn = false;
+  }
   if (stateOnInit < 0) {
     SUPLA_LOG_INFO(
               "Relay[%d] restored relay state: %s",
               channel.getChannelNumber(),
-              (relayFlags & RELAY_FLAGS_ON) ? "ON" : "OFF");
-    if (relayFlags & RELAY_FLAGS_ON) {
+              restoreOn ? "ON" : "OFF");
+    if (restoreOn) {
       stateOnInit = STATE_ON_INIT_RESTORED_ON;
     } else {
       stateOnInit = STATE_ON_INIT_RESTORED_OFF;

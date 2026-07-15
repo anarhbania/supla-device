@@ -153,6 +153,36 @@ TEST_F(RelayFixture, SoftResetPreloadsStateBeforePinModeWhenEnabled) {
   relay.onInit();
 }
 
+TEST_F(RelayFixture, RestoredImpulseStateStartsOff) {
+  const int gpio = 11;
+  Supla::Control::Relay relay(gpio);
+  relay.setDefaultStateRestore();
+  storage.defaultInitialization(5);
+
+  EXPECT_CALL(storage, readStorage(_, _, 4, _))
+      .WillOnce([](uint32_t, unsigned char *data, int, bool) {
+        uint32_t storedDurationMs = 500;
+        memcpy(data, &storedDurationMs, sizeof(storedDurationMs));
+        return 4;
+      });
+  EXPECT_CALL(storage, readStorage(_, _, 1, _))
+      .WillOnce(DoAll(SetArgPointee<1>(
+                          RELAY_FLAGS_IMPULSE_FUNCTION | RELAY_FLAGS_ON),
+                      Return(1)));
+
+  int gpioValue = 1;
+  EXPECT_CALL(ioMock, digitalWrite(gpio, _))
+      .WillRepeatedly(::testing::SaveArg<1>(&gpioValue));
+  EXPECT_CALL(ioMock, pinMode(gpio, OUTPUT));
+
+  relay.onLoadState();
+  relay.onInit();
+
+  EXPECT_EQ(0, gpioValue);
+  EXPECT_EQ(500u, relay.getStoredTurnOnDurationMs());
+  EXPECT_TRUE(relay.isImpulseFunction());
+}
+
 TEST_F(RelayFixture, UnsetIoPinDoesNothing) {
   SuplaIoMock outputIo;
   Supla::Io::IoPin outputPin;
