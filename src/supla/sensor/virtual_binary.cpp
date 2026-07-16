@@ -41,7 +41,7 @@ bool VirtualBinary::getValue() {
 
 void VirtualBinary::onInit() {
   clearedByTimeout = false;
-  channel.setNewValue(getValue());
+  setInitialChannelValue(getValue());
   stateChangeTimeMs = millis();
 }
 

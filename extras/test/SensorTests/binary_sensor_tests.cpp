@@ -19,6 +19,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <supla-common/proto.h>
+#include <supla/events.h>
 #include <supla/sensor/virtual_binary.h>
 #include <supla/sensor/binary.h>
 #include <simple_time.h>
@@ -31,6 +32,11 @@ class BinaryConfigStub : public Supla::Sensor::BinaryBase {
   bool getValue() override {
     return false;
   }
+};
+
+class BinaryActionHandlerMock : public Supla::ActionHandler {
+ public:
+  MOCK_METHOD(void, handleAction, (int, int), (override));
 };
 
 TEST(BinarySensorTests, VirtualBinaryValuesTest) {
@@ -126,6 +132,69 @@ TEST(BinarySensorTests, VirtualBinaryCanDisableConfiguredTimeout) {
 
   EXPECT_TRUE(sensor.getChannel()->getValueBool());
   EXPECT_TRUE(sensor.getValue());
+}
+
+TEST(BinarySensorTests, VirtualBinaryInitDoesNotRunActions) {
+  Supla::Channel::resetToDefaults();
+  SimpleTime time;
+  testing::StrictMock<BinaryActionHandlerMock> actionHandler;
+  Supla::Sensor::VirtualBinary sensor;
+
+  sensor.addAction(1, actionHandler, Supla::ON_TURN_ON);
+  sensor.addAction(2, actionHandler, Supla::ON_TURN_OFF);
+  sensor.addAction(3, actionHandler, Supla::ON_CHANGE);
+  sensor.addAction(4, actionHandler, Supla::ON_SECONDARY_CHANNEL_CHANGE);
+  sensor.set();
+
+  sensor.onInit();
+
+  EXPECT_TRUE(sensor.getChannel()->getValueBool());
+
+  testing::InSequence sequence;
+  EXPECT_CALL(actionHandler, handleAction(Supla::ON_TURN_OFF, 2));
+  EXPECT_CALL(actionHandler, handleAction(Supla::ON_CHANGE, 3));
+  EXPECT_CALL(actionHandler,
+              handleAction(Supla::ON_SECONDARY_CHANNEL_CHANGE, 4));
+
+  sensor.clear();
+  time.advance(101);
+  sensor.iterateAlways();
+
+  EXPECT_FALSE(sensor.getChannel()->getValueBool());
+}
+
+TEST(BinarySensorTests, BinaryInitDoesNotRunActions) {
+  Supla::Channel::resetToDefaults();
+  DigitalInterfaceMock ioMock;
+  SimpleTime time;
+  testing::StrictMock<BinaryActionHandlerMock> actionHandler;
+
+  int gpioValue = 1;
+  EXPECT_CALL(ioMock, pinMode(1, INPUT)).WillOnce(::testing::Return());
+  EXPECT_CALL(ioMock, digitalRead(1))
+      .WillRepeatedly(::testing::ReturnPointee(&gpioValue));
+
+  Supla::Sensor::Binary sensor(1);
+  sensor.addAction(1, actionHandler, Supla::ON_TURN_ON);
+  sensor.addAction(2, actionHandler, Supla::ON_TURN_OFF);
+  sensor.addAction(3, actionHandler, Supla::ON_CHANGE);
+  sensor.addAction(4, actionHandler, Supla::ON_SECONDARY_CHANNEL_CHANGE);
+
+  sensor.onInit();
+
+  EXPECT_TRUE(sensor.getChannel()->getValueBool());
+
+  testing::InSequence sequence;
+  EXPECT_CALL(actionHandler, handleAction(Supla::ON_TURN_OFF, 2));
+  EXPECT_CALL(actionHandler, handleAction(Supla::ON_CHANGE, 3));
+  EXPECT_CALL(actionHandler,
+              handleAction(Supla::ON_SECONDARY_CHANNEL_CHANGE, 4));
+
+  gpioValue = 0;
+  time.advance(101);
+  sensor.iterateAlways();
+
+  EXPECT_FALSE(sensor.getChannel()->getValueBool());
 }
 
 TEST(BinarySensorTests, BinaryConfigStoresAlarmMutedInChannelConfig) {

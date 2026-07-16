@@ -185,6 +185,7 @@ class BinaryBase : public ElementWithChannelActions {
                          uint8_t configType) override;
 
  protected:
+  void setInitialChannelValue(bool value);
   void saveConfig();
   void printConfig();
   void printConfig(const TChannelConfig_BinarySensor *serverConfig);
