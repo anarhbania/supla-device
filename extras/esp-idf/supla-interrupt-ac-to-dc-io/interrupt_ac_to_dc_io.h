@@ -69,6 +69,7 @@ class InterruptAcToDcIo : public Io::Base, public Element {
       {};
   uint8_t gpioRawActivitySeen[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
   uint8_t gpioInputNoiseGuardEnabled[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
+  uint8_t gpioInputNoiseGuardWasActive[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
   bool initialized = false;
   uint8_t offStateLevel = 0;
   uint32_t initCounter = 100;

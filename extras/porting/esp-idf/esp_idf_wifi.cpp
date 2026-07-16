@@ -154,7 +154,7 @@ static void eventHandler(void *arg,
           }
         }
         if (!thisNetIntfPtr->isInConfigMode()) {
-          Supla::InputNoiseGuard::NotifyWifiTransition();
+          Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
           esp_wifi_connect();
           SUPLA_LOG_DEBUG(
                     "[%s] Connect to the AP fail (reason %d). Trying again",
@@ -174,6 +174,7 @@ static void eventHandler(void *arg,
   } else if (eventBase == IP_EVENT) {
     switch (eventId) {
       case IP_EVENT_STA_GOT_IP: {
+        Supla::InputNoiseGuard::NotifyWifiStaConnected();
         ip_event_got_ip_t *event = static_cast<ip_event_got_ip_t *>(eventData);
         if (thisNetIntfPtr) {
           thisNetIntfPtr->setIpReady(true);

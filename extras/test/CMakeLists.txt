@@ -70,6 +70,7 @@ file(GLOB TEST_SRC CONFIGURE_DEPENDS
   ChannelElementTests/*.cpp
   InternalPinOutputTests/*.cpp
   InputNoiseGuardTests/*.cpp
+  InterruptAcToDcIoTests/*.cpp
   BlinkingLedTests/*.cpp
   PinStatusLedTests/*.cpp
   ConditionTests/*.cpp
@@ -104,6 +105,8 @@ if(NOT SUPLA_TEST_CURL_HTTP_ENABLED)
 endif()
 
 list(APPEND TEST_SRC ../../src/supla-common/proto_check.cpp)
+list(APPEND TEST_SRC
+  ../esp-idf/supla-interrupt-ac-to-dc-io/interrupt_ac_to_dc_io.cpp)
 
 file(GLOB DOUBLE_SRC CONFIGURE_DEPENDS doubles/*.cpp)
 
@@ -151,6 +154,7 @@ add_executable(sd4linuxtests
 
 target_include_directories(supladevicetests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/doubles
+  ${CMAKE_CURRENT_SOURCE_DIR}/../esp-idf/supla-interrupt-ac-to-dc-io
 )
 
 target_include_directories(sd4linuxtests PRIVATE

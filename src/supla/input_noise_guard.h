@@ -27,6 +27,8 @@ namespace Supla {
 namespace InputNoiseGuard {
 
 void NotifyWifiTransition();
+void NotifyWifiStaDisconnected();
+void NotifyWifiStaConnected();
 void IgnoreForMs(uint32_t timeoutMs);
 
 void SetWifiTransitionGuardMs(uint32_t timeoutMs);

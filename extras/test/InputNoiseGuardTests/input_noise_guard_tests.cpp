@@ -88,6 +88,69 @@ TEST_F(InputNoiseGuardFixture, NotifyWifiTransitionUsesConfiguredTimeout) {
   EXPECT_EQ(750u, Supla::InputNoiseGuard::GetWifiTransitionGuardMs());
 }
 
+TEST_F(InputNoiseGuardFixture, WifiDisconnectsExtendGuardUpToThreeTimeouts) {
+  Supla::InputNoiseGuard::SetWifiTransitionGuardMs(100);
+
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  EXPECT_EQ(100u, Supla::InputNoiseGuard::RemainingMs());
+
+  time.advance(80);
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  EXPECT_EQ(100u, Supla::InputNoiseGuard::RemainingMs());
+
+  time.advance(80);
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  EXPECT_EQ(100u, Supla::InputNoiseGuard::RemainingMs());
+
+  time.advance(80);
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  EXPECT_EQ(60u, Supla::InputNoiseGuard::RemainingMs());
+
+  time.advance(60);
+  EXPECT_FALSE(Supla::InputNoiseGuard::IsActive());
+
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  EXPECT_FALSE(Supla::InputNoiseGuard::IsActive());
+}
+
+TEST_F(InputNoiseGuardFixture, WifiConnectionStartsNewDisconnectSeries) {
+  Supla::InputNoiseGuard::SetWifiTransitionGuardMs(100);
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  time.advance(300);
+
+  Supla::InputNoiseGuard::NotifyWifiStaConnected();
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+
+  EXPECT_TRUE(Supla::InputNoiseGuard::IsActive());
+  EXPECT_EQ(100u, Supla::InputNoiseGuard::RemainingMs());
+}
+
+TEST_F(InputNoiseGuardFixture, WifiConnectionDoesNotShortenActiveGuard) {
+  Supla::InputNoiseGuard::SetWifiTransitionGuardMs(100);
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  time.advance(40);
+
+  Supla::InputNoiseGuard::NotifyWifiStaConnected();
+
+  EXPECT_TRUE(Supla::InputNoiseGuard::IsActive());
+  EXPECT_EQ(60u, Supla::InputNoiseGuard::RemainingMs());
+}
+
+TEST_F(InputNoiseGuardFixture, WifiTransitionStartsNewDisconnectSeries) {
+  Supla::InputNoiseGuard::SetWifiTransitionGuardMs(100);
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  time.advance(300);
+  EXPECT_FALSE(Supla::InputNoiseGuard::IsActive());
+
+  Supla::InputNoiseGuard::NotifyWifiTransition();
+  time.advance(100);
+  EXPECT_FALSE(Supla::InputNoiseGuard::IsActive());
+
+  Supla::InputNoiseGuard::NotifyWifiStaDisconnected();
+  EXPECT_TRUE(Supla::InputNoiseGuard::IsActive());
+  EXPECT_EQ(100u, Supla::InputNoiseGuard::RemainingMs());
+}
+
 TEST_F(InputNoiseGuardFixture, ZeroTimeoutDoesNotActivateGuard) {
   Supla::InputNoiseGuard::IgnoreForMs(0);
 

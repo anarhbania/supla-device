@@ -22,6 +22,10 @@
 namespace {
 uint32_t ignoreUntilMs = 0;
 uint32_t wifiTransitionGuardMs = SUPLA_INPUT_NOISE_GUARD_WIFI_TRANSITION_MS;
+bool wifiStaDisconnectSeriesActive = false;
+uint32_t wifiStaDisconnectSeriesStartMs = 0;
+
+constexpr uint32_t kWifiStaDisconnectMaxGuardMultiplier = 3;
 
 bool timeBefore(uint32_t left, uint32_t right) {
   return static_cast<int32_t>(left - right) < 0;
@@ -29,7 +33,35 @@ bool timeBefore(uint32_t left, uint32_t right) {
 }  // namespace
 
 void Supla::InputNoiseGuard::NotifyWifiTransition() {
+  wifiStaDisconnectSeriesActive = false;
+  wifiStaDisconnectSeriesStartMs = 0;
   IgnoreForMs(wifiTransitionGuardMs);
+}
+
+void Supla::InputNoiseGuard::NotifyWifiStaDisconnected() {
+  uint32_t now = millis();
+  if (!wifiStaDisconnectSeriesActive) {
+    wifiStaDisconnectSeriesActive = true;
+    wifiStaDisconnectSeriesStartMs = now;
+  }
+
+  uint32_t maxIgnoreUntilMs =
+      wifiStaDisconnectSeriesStartMs +
+      wifiTransitionGuardMs * kWifiStaDisconnectMaxGuardMultiplier;
+  if (!timeBefore(now, maxIgnoreUntilMs)) {
+    return;
+  }
+
+  uint32_t newIgnoreUntilMs = now + wifiTransitionGuardMs;
+  if (timeBefore(maxIgnoreUntilMs, newIgnoreUntilMs)) {
+    newIgnoreUntilMs = maxIgnoreUntilMs;
+  }
+  IgnoreForMs(newIgnoreUntilMs - now);
+}
+
+void Supla::InputNoiseGuard::NotifyWifiStaConnected() {
+  wifiStaDisconnectSeriesActive = false;
+  wifiStaDisconnectSeriesStartMs = 0;
 }
 
 void Supla::InputNoiseGuard::IgnoreForMs(uint32_t timeoutMs) {
@@ -64,4 +96,6 @@ uint32_t Supla::InputNoiseGuard::RemainingMs() {
 
 void Supla::InputNoiseGuard::Clear() {
   ignoreUntilMs = 0;
+  wifiStaDisconnectSeriesActive = false;
+  wifiStaDisconnectSeriesStartMs = 0;
 }

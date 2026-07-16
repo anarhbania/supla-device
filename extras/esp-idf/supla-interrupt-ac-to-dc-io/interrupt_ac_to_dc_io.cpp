@@ -21,11 +21,15 @@
 #include <supla/input_noise_guard.h>
 #include <supla/log_wrapper.h>
 #include <supla/time.h>
+#ifdef SUPLA_TEST
+#include <interrupt_ac_to_dc_io_esp_idf_stubs.h>
+#else
 #include <driver/gpio.h>
 #include <hal/gpio_types.h>
 #include <esp_attr.h>
 #include <esp_intr_alloc.h>
 #include <freertos/FreeRTOS.h>
+#endif
 
 using Supla::InterruptAcToDcIo;
 
@@ -35,7 +39,7 @@ gpioInterruptCounts[INTERRUPT_AC_TO_DC_IO_MAX_GPIOS] = {};
 static portMUX_TYPE gpioInterruptCountsMux = portMUX_INITIALIZER_UNLOCKED;
 
 void IRAM_ATTR interruptHandler(void* arg) {
-  uint32_t gpioNum = reinterpret_cast<uint32_t>(arg);
+  uintptr_t gpioNum = reinterpret_cast<uintptr_t>(arg);
   if (gpioNum < INTERRUPT_AC_TO_DC_IO_MAX_GPIOS) {
     portENTER_CRITICAL_ISR(&gpioInterruptCountsMux);
     uint8_t interruptCount = gpioInterruptCounts[gpioNum];
@@ -72,7 +76,8 @@ void InterruptAcToDcIo::addGpio(int gpio,
 
   gpioMinOffTimeout[gpio] = minOffTimeoutMs;
   gpioMinQuietBeforeNextActivityMs[gpio] = minQuietBeforeNextActivityMs;
-  if (minOffTimeoutMs > initCounter) {
+  if (minOffTimeoutMs > 0 &&
+      static_cast<uint32_t>(minOffTimeoutMs) > initCounter) {
     initCounter = minOffTimeoutMs;
   }
   gpioState[gpio] = 0;
@@ -151,6 +156,7 @@ void InterruptAcToDcIo::disableInputNoiseGuardForGpio(int gpio) {
 }
 
 int InterruptAcToDcIo::customDigitalRead(int channelNumber, uint8_t pin) {
+  (void)channelNumber;
   if (!isInitialized()) {
     SUPLA_LOG_ERROR("InterruptAcToDcIo: not initialized");
     return 0;
@@ -181,12 +187,33 @@ void InterruptAcToDcIo::onFastTimer() {
 
     if (gpioInputNoiseGuardEnabled[i] &&
         Supla::InputNoiseGuard::IsActive()) {
+      gpioInputNoiseGuardWasActive[i] = 1;
       gpioRawActivitySeen[i] = 0;
       gpioLastRawTimestampMs[i] = 0;
       gpioAcCandidateEdges[i] = 0;
       gpioAcCandidateActiveSamples[i] = 0;
       gpioAcCandidateFirstTimestampMs[i] = 0;
       if (gpioState[i] == 1 || gpioState[i] == 2) {
+        gpioLastTimestampMs[i] = now;
+      }
+      continue;
+    }
+
+    if (gpioInputNoiseGuardEnabled[i] &&
+        gpioInputNoiseGuardWasActive[i]) {
+      gpioInputNoiseGuardWasActive[i] = 0;
+      gpioRawActivitySeen[i] = 0;
+      gpioLastRawTimestampMs[i] = 0;
+      gpioAcCandidateEdges[i] = 0;
+      gpioAcCandidateActiveSamples[i] = 0;
+      gpioAcCandidateFirstTimestampMs[i] = 0;
+
+      if (gpio_get_level(static_cast<gpio_num_t>(i)) == offStateLevel) {
+        gpioLastTimestampMs[i] = gpioState[i] == 0 ? 0 : now;
+      } else if (gpioState[i] == 1) {
+        gpioLastTimestampMs[i] = 0;
+      } else {
+        gpioState[i] = 2;
         gpioLastTimestampMs[i] = now;
       }
       continue;
@@ -239,7 +266,8 @@ void InterruptAcToDcIo::onFastTimer() {
       continue;
     }
     if (gpioLastTimestampMs[i] != 0 &&
-        now - gpioLastTimestampMs[i] > gpioMinOffTimeout[i]) {
+        now - static_cast<uint32_t>(gpioLastTimestampMs[i]) >
+            static_cast<uint32_t>(gpioMinOffTimeout[i])) {
       gpioLastTimestampMs[i] = 0;
       gpioAcCandidateEdges[i] = 0;
       gpioAcCandidateActiveSamples[i] = 0;
@@ -263,5 +291,8 @@ void InterruptAcToDcIo::setOffStateLevel(uint8_t level) {
 void InterruptAcToDcIo::customPinMode(int channelNumber,
                                       uint8_t pin,
                                       uint8_t mode) {
+  (void)channelNumber;
+  (void)pin;
+  (void)mode;
   // do nothing
 }
