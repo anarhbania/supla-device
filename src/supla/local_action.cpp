@@ -57,11 +57,27 @@ bool ActionHandlerClient::isEnabled() {
 
 void ActionHandlerClient::enable() {
   enabled = true;
+  disabledForConfigMode = false;
 }
 
 void ActionHandlerClient::disable() {
   if (!alwaysEnabled) {
     enabled = false;
+    disabledForConfigMode = false;
+  }
+}
+
+void ActionHandlerClient::disableForConfigMode() {
+  if (!alwaysEnabled && enabled) {
+    enabled = false;
+    disabledForConfigMode = true;
+  }
+}
+
+void ActionHandlerClient::restoreAfterConfigMode() {
+  if (disabledForConfigMode) {
+    enabled = true;
+    disabledForConfigMode = false;
   }
 }
 

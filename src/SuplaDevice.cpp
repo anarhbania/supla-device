@@ -436,7 +436,8 @@ void SuplaDeviceClass::setupDeviceMode() {
            cfgModeState == Supla::CfgModeState::Done)) {
         deviceMode = Supla::DEVICE_MODE_OFFLINE;
       }
-      if (cfgModeState == Supla::CfgModeState::NotSet) {
+      if (cfgModeState == Supla::CfgModeState::NotSet &&
+          deviceMode == Supla::DEVICE_MODE_CONFIG) {
         cfgModeState = Supla::CfgModeState::CfgModeStartedFor1hPending;
       }
       break;
@@ -1018,7 +1019,8 @@ void SuplaDeviceClass::enterConfigMode() {
   Supla::Network::DisconnectProtocols();
   Supla::Network::SetConfigMode();
 
-  if (isLeaveCfgModeAfterInactivityEnabled()) {
+  if (isLeaveCfgModeAfterInactivityEnabled() &&
+      cfgModeState != Supla::CfgModeState::CfgModeStartedFor1hPending) {
     cfgModeState = Supla::CfgModeState::CfgModeStartedPending;
   }
 
@@ -1044,6 +1046,7 @@ void SuplaDeviceClass::leaveConfigModeWithoutRestart() {
     Supla::WebServer::Instance()->stop();
   }
 
+  restoreLocalActionsAfterConfigMode();
   setupDeviceMode();
 
   if (Supla::Network::PopSetupNeeded()) {
@@ -1455,7 +1458,10 @@ void SuplaDeviceClass::restartCfgModeTimeout(bool requireRestart) {
 
   if (forceRestartTimeMs == 0) {
     if (requireRestart || deviceRestartTimeoutTimestamp) {
-      cfgModeState = Supla::CfgModeState::Done;
+      if (cfgModeState !=
+          Supla::CfgModeState::CfgModeStartedFor1hPending) {
+        cfgModeState = Supla::CfgModeState::Done;
+      }
       deviceRestartTimeoutTimestamp = millis();
     }
     enterConfigModeTimestamp = millis();
@@ -1630,7 +1636,8 @@ void SuplaDeviceClass::checkIfLeaveCfgModeOrRestartIsNeeded() {
 
   // In StartWithCfgModeThenOffline device starts in "offline" mode with cfg
   // mode enabled for 1h. After that time, it will switch to full offline mode.
-  // After any user interaction with www inteface, it switches to Done state.
+  // WWW activity may schedule a restart, but the initial config window remains
+  // active until config mode is actually left or the device restarts.
   if (cfgModeState == Supla::CfgModeState::CfgModeStartedFor1hPending &&
       _millis > 60ULL * 60 * 1000) {
     SUPLA_LOG_INFO("Offline mode timeout triggered");
@@ -1757,19 +1764,31 @@ void SuplaDeviceClass::setCustomHostnamePrefix(const char *prefix) {
 }
 
 void SuplaDeviceClass::disableLocalActionsIfNeeded() {
-  // Disable local actions/buttons if minimal config is ready.
-  // This is required to have buttons working for device with empty
-  // configuration, instead of handling device reset
+  // Legacy StartInCfgMode and the initial one-hour config window keep local
+  // actions enabled until the minimal configuration is ready. All later
+  // config mode entries disable local actions.
   auto cfg = Supla::Storage::ConfigInstance();
-  if (cfg && cfg->isMinimalConfigReady()) {
+  bool keepActionsUntilConfigured =
+      initialMode == Supla::InitialMode::StartInCfgMode ||
+      (initialMode == Supla::InitialMode::StartWithCfgModeThenOffline &&
+       cfgModeState == Supla::CfgModeState::CfgModeStartedFor1hPending);
+  if (!keepActionsUntilConfigured ||
+      (cfg && cfg->isMinimalConfigReady())) {
     auto ptr = Supla::ActionHandlerClient::begin;
     while (ptr) {
       if (ptr->trigger && ptr->trigger->disableActionsInConfigMode()) {
-        ptr->disable();  // some actions can be created with "alwaysEnabled"
-                         // flag in such case, disable() has no effect
+        ptr->disableForConfigMode();
       }
       ptr = ptr->next;
     }
+  }
+}
+
+void SuplaDeviceClass::restoreLocalActionsAfterConfigMode() {
+  auto ptr = Supla::ActionHandlerClient::begin;
+  while (ptr) {
+    ptr->restoreAfterConfigMode();
+    ptr = ptr->next;
   }
 }
 

@@ -241,6 +241,7 @@ class SuplaDeviceClass : public Supla::ActionHandler,
   void restartCfgModeTimeout(bool requireRestart);
   void resetToFactorySettings();
   void disableLocalActionsIfNeeded();
+  void restoreLocalActionsAfterConfigMode();
   void requestCfgMode();
 
   int8_t getCurrentStatus() const;

@@ -42,11 +42,14 @@ class ActionHandlerClient {
   virtual void setAlwaysEnabled();
   virtual void enable();
   virtual void disable();
+  void disableForConfigMode();
+  void restoreAfterConfigMode();
   virtual bool isAlwaysEnabled();
 
  protected:
   bool enabled = true;
   bool alwaysEnabled = false;
+  bool disabledForConfigMode = false;
 };
 
 class LocalAction {
