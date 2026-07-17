@@ -88,10 +88,8 @@ void analogWriteRange(uint32_t range) {
 }
 
 unsigned int pulseIn(uint8_t pin, uint8_t val, uint64_t timeoutMicro) {
-  (void)(pin);
-  (void)(val);
-  (void)(timeoutMicro);
-  return 0;
+  assert(DigitalInterface::instance);
+  return DigitalInterface::instance->pulseIn(pin, val, timeoutMicro);
 }
 
 void attachInterrupt(uint8_t pin, void (*func)(void), int mode) {
@@ -114,6 +112,9 @@ uint32_t millis() {
 }
 
 void delay(uint64_t) {
+}
+
+void delayMicroseconds(uint64_t) {
 }
 
 long map(  // NOLINT

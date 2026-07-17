@@ -106,7 +106,8 @@ endif()
 
 list(APPEND TEST_SRC ../../src/supla-common/proto_check.cpp)
 list(APPEND TEST_SRC
-  ../esp-idf/supla-interrupt-ac-to-dc-io/interrupt_ac_to_dc_io.cpp)
+  ../esp-idf/supla-interrupt-ac-to-dc-io/interrupt_ac_to_dc_io.cpp
+  ../../src/supla/sensor/HC_SR04.cpp)
 
 file(GLOB DOUBLE_SRC CONFIGURE_DEPENDS doubles/*.cpp)
 
