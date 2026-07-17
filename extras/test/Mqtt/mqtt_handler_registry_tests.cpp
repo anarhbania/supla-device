@@ -41,7 +41,10 @@ class InspectableMqtt : public MqttMock {
 
 class TestHandler : public Supla::Protocol::MqttChannelHandler {
  public:
-  explicit TestHandler(int channelType = 0) : channelType(channelType) {
+  TestHandler() : TestHandler(0) {
+  }
+
+  explicit TestHandler(int channelType) : channelType(channelType) {
   }
 
   void setChannelType(int newChannelType) {
