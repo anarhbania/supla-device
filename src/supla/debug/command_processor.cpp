@@ -300,6 +300,16 @@ struct CommandProcessor::Command {
 CommandProcessor::CommandProcessor(SuplaDeviceClass *device) : device(device) {
 }
 
+#if SUPLA_TEST
+CommandProcessor::CommandProcessor(SuplaDeviceClass *device,
+                                   TestCalcfgHandler testCalcfgHandler,
+                                   void *testCalcfgContext)
+    : device(device),
+      testCalcfgHandler(testCalcfgHandler),
+      testCalcfgContext(testCalcfgContext) {
+}
+#endif
+
 bool CommandProcessor::processLine(const char *line, ResponseWriter *writer) {
   if (line == nullptr || line[0] == '\0') {
     return false;
@@ -418,7 +428,13 @@ void CommandProcessor::processCommand(const Command &command,
   auto sendLocalCalcfg =
       [&](uint32_t commandId, const void *data, uint32_t dataSize,
           const char *op, TDS_DeviceCalCfgResult **output = nullptr) -> int {
-    if (device == nullptr || dataSize > SUPLA_CALCFG_DATA_MAXSIZE) {
+    if (
+#if SUPLA_TEST
+        (device == nullptr && testCalcfgHandler == nullptr) ||
+#else
+        device == nullptr ||
+#endif
+        dataSize > SUPLA_CALCFG_DATA_MAXSIZE) {
       sendError(writer, "invalid_calcfg_payload");
       return SUPLA_CALCFG_RESULT_FALSE;
     }
@@ -443,7 +459,13 @@ void CommandProcessor::processCommand(const Command &command,
     }
     result->ChannelNumber = -1;
     result->Command = commandId;
-    int resultCode = device->handleCalcfgFromServer(request, result);
+    int resultCode =
+#if SUPLA_TEST
+        testCalcfgHandler != nullptr
+            ? testCalcfgHandler(testCalcfgContext, request, result)
+            :
+#endif
+            device->handleCalcfgFromServer(request, result);
     result->Result = resultCode;
     char line[320] = {};
     if (result->DataSize == sizeof(TCalCfg_SupletResult)) {
@@ -860,26 +882,30 @@ void CommandProcessor::processCommand(const Command &command,
       }
       auto *chunk =
           reinterpret_cast<TCalCfg_SupletDefinitionConfigChunk *>(result->Data);
+      const uint16_t chunkTotalSize = chunk->TotalSize;
+      const uint8_t chunkSize = chunk->Size;
       if (chunk->DefinitionId != command.definitionId ||
           chunk->DefinitionVersion != command.definitionVersion ||
           result->DataSize !=
               offsetof(TCalCfg_SupletDefinitionConfigChunk, Data) +
-                  chunk->Size ||
-          chunk->TotalSize > SUPLA_SUPLET_MAX_DEFINITION_JSON_SIZE ||
-          offset + chunk->Size > SUPLA_SUPLET_MAX_DEFINITION_JSON_SIZE) {
+                  chunkSize ||
+          chunkTotalSize > SUPLA_SUPLET_MAX_DEFINITION_JSON_SIZE ||
+          offset + chunkSize > SUPLA_SUPLET_MAX_DEFINITION_JSON_SIZE ||
+          (offset != 0 && chunkTotalSize != totalSize) ||
+          offset + chunkSize > chunkTotalSize) {
         delete result;
         delete[] definitionJson;
         sendError(writer, "malformed_definition_chunk");
         return;
       }
       if (offset == 0) {
-        totalSize = chunk->TotalSize;
+        totalSize = chunkTotalSize;
         source = chunk->Source;
       }
-      memcpy(definitionJson + offset, chunk->Data, chunk->Size);
-      offset += chunk->Size;
+      memcpy(definitionJson + offset, chunk->Data, chunkSize);
+      offset += chunkSize;
       delete result;
-      if (offset >= chunk->TotalSize || chunk->Size == 0) {
+      if (offset >= chunkTotalSize || chunkSize == 0) {
         break;
       }
     }
@@ -1038,24 +1064,28 @@ void CommandProcessor::processCommand(const Command &command,
       }
       auto *chunk =
           reinterpret_cast<TCalCfg_SupletInstanceConfigChunk *>(result->Data);
+      const uint16_t chunkTotalSize = chunk->TotalSize;
+      const uint8_t chunkSize = chunk->Size;
       if (chunk->InstanceId != command.instanceId ||
           result->DataSize !=
               offsetof(TCalCfg_SupletInstanceConfigChunk, Data) +
-                  chunk->Size ||
-          chunk->TotalSize > SUPLA_SUPLET_MAX_CONFIG_SIZE ||
-          offset + chunk->Size > SUPLA_SUPLET_MAX_CONFIG_SIZE) {
+                  chunkSize ||
+          chunkTotalSize > SUPLA_SUPLET_MAX_CONFIG_SIZE ||
+          offset + chunkSize > SUPLA_SUPLET_MAX_CONFIG_SIZE ||
+          (offset != 0 && chunkTotalSize != totalSize) ||
+          offset + chunkSize > chunkTotalSize) {
         delete result;
         delete[] config;
         sendError(writer, "malformed_config_chunk");
         return;
       }
       if (offset == 0) {
-        totalSize = chunk->TotalSize;
+        totalSize = chunkTotalSize;
       }
-      memcpy(config + offset, chunk->Data, chunk->Size);
-      offset += chunk->Size;
+      memcpy(config + offset, chunk->Data, chunkSize);
+      offset += chunkSize;
       delete result;
-      if (offset >= chunk->TotalSize || chunk->Size == 0) {
+      if (offset >= chunkTotalSize || chunkSize == 0) {
         break;
       }
     }

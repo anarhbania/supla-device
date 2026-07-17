@@ -22,6 +22,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#if SUPLA_TEST
+#include <supla-common/proto.h>
+#endif
+
 #include <supla/debug/debug_config.h>
 
 class SuplaDeviceClass;
@@ -38,6 +42,15 @@ class ResponseWriter {
 class CommandProcessor {
  public:
   explicit CommandProcessor(SuplaDeviceClass *device);
+
+#if SUPLA_TEST
+  using TestCalcfgHandler = int (*)(void *context,
+                                    TSD_DeviceCalCfgRequest *request,
+                                    TDS_DeviceCalCfgResult *result);
+  CommandProcessor(SuplaDeviceClass *device,
+                   TestCalcfgHandler testCalcfgHandler,
+                   void *testCalcfgContext);
+#endif
 
   bool processLine(const char *line, ResponseWriter *writer);
 
@@ -60,10 +73,13 @@ class CommandProcessor {
 
   SuplaDeviceClass *device = nullptr;
   uint32_t sessionCounter = 1;
+#if SUPLA_TEST
+  TestCalcfgHandler testCalcfgHandler = nullptr;
+  void *testCalcfgContext = nullptr;
+#endif
 };
 
 }  // namespace Debug
 }  // namespace Supla
 
 #endif  // SRC_SUPLA_DEBUG_COMMAND_PROCESSOR_H_
-
