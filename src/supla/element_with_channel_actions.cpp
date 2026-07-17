@@ -274,7 +274,7 @@ bool Supla::ElementWithChannelActions::setAndSaveFunction(
   if (!channel) {
     return false;
   }
-  if (setFunction(channelFunction)) {
+  if (setRuntimeFunction(channelFunction)) {
     auto cfg = Supla::Storage::ConfigInstance();
     if (cfg) {
       cfg->setChannelFunction(getChannelNumber(), channelFunction);

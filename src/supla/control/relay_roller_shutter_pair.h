@@ -46,7 +46,7 @@ class ManagedRelay : public Relay {
       override;
   void iterateAlways() override;
   bool iterateConnected() override;
-  bool setAndSaveFunction(uint32_t channelFunction) override;
+  bool setRuntimeFunction(uint32_t channelFunction) override;
 
  private:
   bool runtimeActive = true;
@@ -140,6 +140,8 @@ class RelayRollerShutterPair : public ElementWithChannelActions {
   RelayRollerShutterPair &setPreloadStateOnSoftReset(bool enabled = true);
   bool setDefaultFunctions(uint32_t primaryFunction,
                            uint32_t secondaryFunction);
+  bool setRuntimeFunctions(uint32_t primaryFunction,
+                           uint32_t secondaryFunction);
   RollerShutter *getRollerShutter();
   const RollerShutter *getRollerShutter() const;
 
@@ -173,6 +175,7 @@ class RelayRollerShutterPair : public ElementWithChannelActions {
                          uint8_t configType) override;
 
  protected:
+  bool setRuntimeFunction(uint32_t channelFunction) override;
   bool setAndSaveFunction(uint32_t channelFunction) override;
 
  private:

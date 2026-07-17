@@ -445,6 +445,19 @@ class Element {
   bool setFunction(uint32_t newFunction);
 
   /**
+   * Sets channel's function at runtime.
+   *
+   * Elements which require additional runtime setup after a function change
+   * should override this method. The default implementation calls
+   * setFunction().
+   *
+   * @param newFunction
+   *
+   * @return true if function was changed, false otherwise
+   */
+  virtual bool setRuntimeFunction(uint32_t newFunction);
+
+  /**
    * Called when channel function changes
    *
    * @param currentFunction old function

@@ -174,6 +174,7 @@ class Relay : public ChannelElement, public ActionHandler {
     defaultImpulseDurationMs = durationMs;
   }
 
+  bool setRuntimeFunction(uint32_t channelFunction) override;
   bool setAndSaveFunction(uint32_t channelFunction) override;
 
   /**

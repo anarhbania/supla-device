@@ -137,10 +137,10 @@ bool ManagedRelay::iterateConnected() {
   return Relay::iterateConnected();
 }
 
-bool ManagedRelay::setAndSaveFunction(uint32_t channelFunction) {
+bool ManagedRelay::setRuntimeFunction(uint32_t channelFunction) {
   bool wasImpulseFunction = isImpulseFunction();
   bool wasStaircaseFunction = isStaircaseFunction();
-  bool functionChanged = Relay::setAndSaveFunction(channelFunction);
+  bool functionChanged = Relay::setRuntimeFunction(channelFunction);
 
   if (!isFullyInitialized()) {
     if (isStaircaseFunction() && !wasStaircaseFunction) {
@@ -497,6 +497,26 @@ bool RelayRollerShutterPair::setDefaultFunctions(
     rebuildButtonActionsThreadSafe();
   } else {
     applyRuntimeMode();
+  }
+
+  return true;
+}
+
+bool RelayRollerShutterPair::setRuntimeFunctions(
+    uint32_t primaryFunction,
+    uint32_t secondaryFunction) {
+  if (!primaryChannel.isFunctionValid(primaryFunction) ||
+      !secondaryChannel.isFunctionValid(secondaryFunction)) {
+    return false;
+  }
+
+  const auto previousPrimaryFunction = primaryChannel.getDefaultFunction();
+  const bool primaryFunctionChanged =
+      relay0.setRuntimeFunction(primaryFunction);
+  relay1.setRuntimeFunction(secondaryFunction);
+
+  if (primaryFunctionChanged) {
+    onFunctionChange(previousPrimaryFunction, primaryFunction);
   }
 
   return true;
@@ -928,6 +948,11 @@ bool RelayRollerShutterPair::setAndSaveFunction(uint32_t channelFunction) {
   }
 
   return functionChanged;
+}
+
+bool RelayRollerShutterPair::setRuntimeFunction(uint32_t channelFunction) {
+  return setRuntimeFunctions(channelFunction,
+                             secondaryChannel.getDefaultFunction());
 }
 
 }  // namespace Control

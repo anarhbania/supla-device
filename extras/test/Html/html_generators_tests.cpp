@@ -17,6 +17,7 @@
  */
 
 #include <SuplaDevice.h>
+#include <arduino_mock.h>
 #include <clock_mock.h>
 #include <config_mock.h>
 #include <gmock/gmock.h>
@@ -1455,6 +1456,7 @@ TEST_F(HtmlCaptureTest,
 TEST_F(HtmlCaptureTest,
        ChannelFunctionParametersSetRelayRollerPairToRollerAndLight) {
   NiceMock<ConfigMock> cfg;
+  SimpleTime time;
   Supla::Channel::resetToDefaults();
   Supla::Control::RelayRollerShutterPair pair(-1, -1);
   Supla::Html::ChannelFunctionParameters param(&pair);
@@ -1484,6 +1486,7 @@ TEST_F(HtmlCaptureTest,
 
 TEST_F(HtmlCaptureTest, ChannelFunctionParametersSetRelayRollerPairSecondary) {
   NiceMock<ConfigMock> cfg;
+  SimpleTime time;
   Supla::Channel::resetToDefaults();
   Supla::Control::RelayRollerShutterPair pair(-1, -1);
   Supla::Html::ChannelFunctionParameters param(&pair);
@@ -1537,24 +1540,141 @@ TEST_F(HtmlCaptureTest,
   Supla::Channel::resetToDefaults();
 }
 
-TEST_F(HtmlCaptureTest, ChannelFunctionParametersSetSimpleRelayFunction) {
+TEST_F(HtmlCaptureTest,
+       ChannelFunctionParametersSafelyChangesActiveRelayToImpulseFunction) {
   NiceMock<ConfigMock> cfg;
+  NiceMock<DigitalInterfaceMock> io;
+  SimpleTime time;
   Supla::Channel::resetToDefaults();
-  Supla::Control::Relay relay(-1);
+  const int gpio = 7;
+  int outputState = 0;
+  ON_CALL(io, digitalWrite(gpio, _))
+      .WillByDefault([&outputState](uint8_t, uint8_t value) {
+        outputState = value;
+      });
+  ON_CALL(io, digitalRead(gpio)).WillByDefault([&outputState](uint8_t) {
+    return outputState;
+  });
+
+  Supla::Control::Relay relay(gpio);
+  relay.setDefaultFunction(SUPLA_CHANNELFNC_LIGHTSWITCH);
+  relay.onInit();
+  relay.turnOn();
+  ASSERT_TRUE(relay.getChannel()->getValueBool());
   Supla::Html::ChannelFunctionParameters param(&relay);
 
-  EXPECT_CALL(cfg, setInt32(StrEq("0_fnc"), SUPLA_CHANNELFNC_LIGHTSWITCH))
+  EXPECT_CALL(cfg,
+              setInt32(StrEq("0_fnc"), SUPLA_CHANNELFNC_CONTROLLINGTHEGATE))
       .WillOnce(Return(true));
 
   char functionValue[12] = {};
   snprintf(functionValue,
            sizeof(functionValue),
            "%d",
-           SUPLA_CHANNELFNC_LIGHTSWITCH);
+           SUPLA_CHANNELFNC_CONTROLLINGTHEGATE);
   EXPECT_TRUE(param.handleResponse("0_fnc", functionValue));
 
   EXPECT_EQ(relay.getChannel()->getDefaultFunction(),
-            SUPLA_CHANNELFNC_LIGHTSWITCH);
+            SUPLA_CHANNELFNC_CONTROLLINGTHEGATE);
+  EXPECT_FALSE(relay.getChannel()->getValueBool());
+  EXPECT_EQ(500u, relay.getStoredTurnOnDurationMs());
+
+  TSD_SuplaChannelNewValue value = {};
+  value.ChannelNumber = relay.getChannelNumber();
+  value.value[0] = 1;
+  ASSERT_EQ(1, relay.handleNewValueFromServer(&value));
+  ASSERT_TRUE(relay.getChannel()->getValueBool());
+
+  time.advance(501);
+  relay.iterateAlways();
+  EXPECT_FALSE(relay.getChannel()->getValueBool());
+
+  Supla::Channel::resetToDefaults();
+}
+
+TEST_F(HtmlCaptureTest,
+       ChannelFunctionParametersSafelyChangesBothPairRelaysToImpulse) {
+  NiceMock<ConfigMock> cfg;
+  NiceMock<DigitalInterfaceMock> io;
+  SimpleTime time;
+  Supla::Channel::resetToDefaults();
+  const int gpio0 = 7;
+  const int gpio1 = 8;
+  int outputState0 = 0;
+  int outputState1 = 0;
+  ON_CALL(io, digitalWrite(gpio0, _))
+      .WillByDefault([&outputState0](uint8_t, uint8_t value) {
+        outputState0 = value;
+      });
+  ON_CALL(io, digitalWrite(gpio1, _))
+      .WillByDefault([&outputState1](uint8_t, uint8_t value) {
+        outputState1 = value;
+      });
+  ON_CALL(io, digitalRead(gpio0)).WillByDefault([&outputState0](uint8_t) {
+    return outputState0;
+  });
+  ON_CALL(io, digitalRead(gpio1)).WillByDefault([&outputState1](uint8_t) {
+    return outputState1;
+  });
+
+  Supla::Control::RelayRollerShutterPair pair(gpio0, gpio1);
+  pair.onInit();
+  Supla::Html::ChannelFunctionParameters param(&pair);
+
+  EXPECT_CALL(cfg,
+              setInt32(StrEq("0_fnc"), SUPLA_CHANNELFNC_CONTROLLINGTHEGATE))
+      .Times(2)
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(cfg, setInt32(StrEq("1_fnc"), SUPLA_CHANNELFNC_LIGHTSWITCH))
+      .WillOnce(Return(true));
+  EXPECT_CALL(cfg,
+              setInt32(StrEq("1_fnc"), SUPLA_CHANNELFNC_CONTROLLINGTHEGATE))
+      .WillOnce(Return(true));
+
+  TSD_SuplaChannelNewValue value = {};
+  value.ChannelNumber = pair.getChannelNumber();
+  value.value[0] = 1;
+  ASSERT_EQ(1, pair.handleNewValueFromServer(&value));
+  ASSERT_TRUE(pair.getChannel()->getValueBool());
+
+  char functionValue[12] = {};
+  snprintf(functionValue,
+           sizeof(functionValue),
+           "%d",
+           SUPLA_CHANNELFNC_CONTROLLINGTHEGATE);
+  ASSERT_TRUE(param.handleResponse("0_fnc", functionValue));
+  EXPECT_FALSE(pair.getChannel()->getValueBool());
+
+  value = {};
+  value.ChannelNumber = pair.getChannelNumber();
+  pair.fillSuplaChannelNewValue(&value);
+  EXPECT_EQ(500u, value.DurationMS);
+  value.value[0] = 1;
+  value.DurationMS = 0;
+  ASSERT_EQ(1, pair.handleNewValueFromServer(&value));
+  time.advance(501);
+  pair.iterateAlways();
+  EXPECT_FALSE(pair.getChannel()->getValueBool());
+
+  value = {};
+  value.ChannelNumber = pair.getSecondaryChannelNumber();
+  value.value[0] = 1;
+  ASSERT_EQ(1, pair.handleNewValueFromServer(&value));
+  ASSERT_TRUE(pair.getSecondaryChannel()->getValueBool());
+
+  ASSERT_TRUE(param.handleResponse("1_fnc", functionValue));
+  EXPECT_FALSE(pair.getSecondaryChannel()->getValueBool());
+
+  value = {};
+  value.ChannelNumber = pair.getSecondaryChannelNumber();
+  pair.fillSuplaChannelNewValue(&value);
+  EXPECT_EQ(500u, value.DurationMS);
+  value.value[0] = 1;
+  value.DurationMS = 0;
+  ASSERT_EQ(1, pair.handleNewValueFromServer(&value));
+  time.advance(501);
+  pair.iterateAlways();
+  EXPECT_FALSE(pair.getSecondaryChannel()->getValueBool());
 
   Supla::Channel::resetToDefaults();
 }

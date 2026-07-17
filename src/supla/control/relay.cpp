@@ -851,13 +851,12 @@ bool Relay::isImpulseFunction(uint32_t functionToCheck) const {
           functionToCheck == SUPLA_CHANNELFNC_CONTROLLINGTHEGARAGEDOOR);
 }
 
-bool Relay::setAndSaveFunction(uint32_t newFunction) {
+bool Relay::setRuntimeFunction(uint32_t newFunction) {
   auto previousFunction = getChannel()->getDefaultFunction();
   bool wasImpulseFunction = isImpulseFunction();
   bool wasStaircaseFunction = isStaircaseFunction();
 
-  bool functionChanged =
-      Supla::ElementWithChannelActions::setAndSaveFunction(newFunction);
+  bool functionChanged = Supla::Element::setRuntimeFunction(newFunction);
 
   if (wasImpulseFunction != isImpulseFunction()) {
     Supla::Storage::ScheduleSave(relayStorageSaveDelay, 2000);
@@ -893,6 +892,10 @@ bool Relay::setAndSaveFunction(uint32_t newFunction) {
   }
 
   return functionChanged;
+}
+
+bool Relay::setAndSaveFunction(uint32_t newFunction) {
+  return Supla::ElementWithChannelActions::setAndSaveFunction(newFunction);
 }
 
 void Relay::updateTimerValue() {

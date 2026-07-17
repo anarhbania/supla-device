@@ -407,6 +407,10 @@ bool Element::setFunction(uint32_t newFunction) {
   return setDefaultFunction(newFunction);
 }
 
+bool Element::setRuntimeFunction(uint32_t newFunction) {
+  return setFunction(newFunction);
+}
+
 void Element::onFunctionChange(uint32_t currentFunction, uint32_t newFunction) {
   (void)(currentFunction);
   (void)(newFunction);

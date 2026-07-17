@@ -260,7 +260,7 @@ bool ChannelFunctionParameters::handleSingleChannelResponse(
 
   cfg->setChannelFunction(channel->getChannelNumber(), function);
   if (channel == element->getChannel()) {
-    element->setDefaultFunction(function);
+    element->setRuntimeFunction(function);
   } else {
     channel->setDefaultFunction(function);
   }
@@ -314,7 +314,7 @@ bool ChannelFunctionParameters::handlePairResponse(const char *key,
 
   if (!isKnownSelectableFunction(requestedFunction) ||
       !isSelectableFunctionSupported(changedChannel, requestedFunction) ||
-      !pair->setDefaultFunctions(primaryFunction, secondaryFunction)) {
+      !pair->setRuntimeFunctions(primaryFunction, secondaryFunction)) {
     SUPLA_LOG_WARNING("ChannelFunctionHtml: unsupported pair function %d",
                       requestedFunction);
     return true;
