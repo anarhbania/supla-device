@@ -121,8 +121,6 @@ class Mqtt : public ProtocolLayer {
   void publishChannelState(int channel);
   void publishExtendedChannelState(int channel);
   void subscribeChannel(int channel);
-  void registerChannelHandler(MqttChannelHandler *handler);
-  void unregisterChannelHandler(MqttChannelHandler *handler);
   const char *getPrefix() const;
   const char *getHostname() const;
   void subscribe(const char *topic, int qos = -1);
@@ -206,6 +204,7 @@ class Mqtt : public ProtocolLayer {
 
   bool isPayloadOn(const char *);
   bool isOpenClosedBinarySensorFunction(int channelFunction) const;
+
   MqttChannelHandler *findChannelHandler(int channelType) const;
 
   friend class HvacMqttHandler;
@@ -227,7 +226,6 @@ class Mqtt : public ProtocolLayer {
   uint16_t channelsCount = 0;
   uint16_t buttonNumber = 0;
   char *prefix = nullptr;
-  MqttChannelHandler *channelHandlers = nullptr;
   // Button number is incremented on each publishHADiscoveryActionTrigger call
   // and it is reset on publishDeviceStatus. So we publish button numbers
   // starting from 1 and incrementing on each ActionTrigger channel found

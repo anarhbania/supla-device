@@ -31,14 +31,6 @@ class MqttChannelHandler {
                                const char *payload,
                                Supla::Element *element) = 0;
   virtual void mqttPublishHADiscovery(Mqtt *mqtt, Supla::Element *element) = 0;
-
-  MqttChannelHandler *mqttNextHandler() const {
-    return nextHandler;
-  }
-
- private:
-  friend class Mqtt;
-  MqttChannelHandler *nextHandler = nullptr;
 };
 
 }  // namespace Protocol

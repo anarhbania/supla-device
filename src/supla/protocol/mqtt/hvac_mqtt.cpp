@@ -16,7 +16,7 @@
 #include <supla/element.h>
 #include <supla/log_wrapper.h>
 #include <supla/protocol/mqtt.h>
-#include <supla/protocol/protocol_layer.h>
+#include <supla/protocol/mqtt_handler_registry.h>
 #include <supla/sensor/therm_hygro_meter.h>
 #include <supla/sensor/thermometer.h>
 #include <supla/tools.h>
@@ -354,13 +354,7 @@ class HvacMqttHandler : public MqttChannelHandler {
 
 void RegisterHvacMqttHandler() {
   static HvacMqttHandler handler;
-  for (auto *proto = ProtocolLayer::first(); proto != nullptr;
-       proto = proto->next()) {
-    if (!proto->isMqtt()) {
-      continue;
-    }
-    static_cast<Mqtt *>(proto)->registerChannelHandler(&handler);
-  }
+  MqttHandlerRegistry::instance().registerHandler(&handler);
 }
 
 }  // namespace Protocol

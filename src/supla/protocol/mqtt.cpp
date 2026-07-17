@@ -30,6 +30,7 @@
 #include <supla/mutex.h>
 #include <supla/network/network.h>
 #include <supla/protocol/mqtt_topic.h>
+#include <supla/protocol/mqtt_handler_registry.h>
 #include <supla/sensor/electricity_meter.h>
 #include <supla/storage/config.h>
 #include <supla/time.h>
@@ -79,55 +80,9 @@ const char *Supla::Protocol::Mqtt::getHostname() const {
   return hostname;
 }
 
-void Supla::Protocol::Mqtt::registerChannelHandler(
-    MqttChannelHandler *handler) {
-  if (handler == nullptr) {
-    return;
-  }
-
-  for (auto *ptr = channelHandlers; ptr != nullptr;
-       ptr = ptr->mqttNextHandler()) {
-    if (ptr->mqttHandledChannelType() == handler->mqttHandledChannelType()) {
-      return;
-    }
-  }
-
-  handler->nextHandler = channelHandlers;
-  channelHandlers = handler;
-}
-
-void Supla::Protocol::Mqtt::unregisterChannelHandler(
-    MqttChannelHandler *handler) {
-  if (handler == nullptr || channelHandlers == nullptr) {
-    return;
-  }
-
-  if (channelHandlers == handler) {
-    channelHandlers = channelHandlers->mqttNextHandler();
-    handler->nextHandler = nullptr;
-    return;
-  }
-
-  auto *ptr = channelHandlers;
-  while (ptr->mqttNextHandler() != nullptr) {
-    if (ptr->mqttNextHandler() == handler) {
-      ptr->nextHandler = handler->mqttNextHandler();
-      handler->nextHandler = nullptr;
-      return;
-    }
-    ptr = ptr->mqttNextHandler();
-  }
-}
-
 Supla::Protocol::MqttChannelHandler *Supla::Protocol::Mqtt::findChannelHandler(
     int channelType) const {
-  for (auto *ptr = channelHandlers; ptr != nullptr;
-       ptr = ptr->mqttNextHandler()) {
-    if (ptr->mqttHandledChannelType() == channelType) {
-      return ptr;
-    }
-  }
-  return nullptr;
+  return MqttHandlerRegistry::instance().findHandler(channelType);
 }
 
 bool Supla::Protocol::Mqtt::onLoadConfig() {
